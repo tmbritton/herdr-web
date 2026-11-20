@@ -30,6 +30,7 @@ Install [mise](https://mise.jdx.dev/), then run from this directory:
 ```bash
 mise trust
 mise install
+mise run hooks:install
 mise run dev
 ```
 
@@ -41,6 +42,7 @@ see [mise's Erlang guide](https://mise.jdx.dev/lang/erlang.html).
 ```bash
 mise run format   # Format source and tests
 mise run check    # Formatting and type checks
+mise run lint     # Gleam compiler warnings treated as errors
 mise run build    # Compile development code
 mise run test     # Real HTTP integration test on an OS-assigned loopback port
 mise run export   # Production bundle in build/erlang-shipment/
@@ -48,6 +50,26 @@ mise run export   # Production bundle in build/erlang-shipment/
 
 The test does not require a running Herdr server. `/healthz` is a **bridge liveness
 check**, not a check of Herdr connectivity. Herdr is not invoked by the scaffold.
+
+### Quality checks and native dependencies
+
+Gleam's standard formatter is `gleam format`; its compiler provides type and lint
+diagnostics. `mise run check` checks formatting, runs `gleam check`, builds with
+`--warnings-as-errors`, and compiles Erlang interoperability modules with
+`erlc -Werror`. The installed pre-commit hook runs `check` and `test`; reinstall it
+with `mise run hooks:install` after cloning or changing the hook.
+
+The supervised subprocess adapter uses `erlexec`. Building its port executable
+requires GNU Make and a C++17 compiler; deployed snapshots include that executable
+and require the host's standard C++ runtime libraries.
+
+Verify the Erlang crypto NIF with `mise exec -- erl -noshell -eval
+'crypto:hash(sha, <<"test">>), halt().'`. A prebuilt OTP distribution can be
+incompatible with Fedora/Bazzite's system OpenSSL. On the initial development
+machine, `mise.local.toml` sets `LD_LIBRARY_PATH` to the locally installed Homebrew
+OpenSSL `lib` directory (`brew --prefix openssl@3`). This machine-specific override
+is ignored by Git; the service installer preserves it in the deployed runtime
+environment. Use a host-compatible OTP build or library path on another machine.
 
 ## Background service
 

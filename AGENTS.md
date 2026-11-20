@@ -34,9 +34,11 @@ Run commands from the project root:
 ```bash
 mise trust
 mise install
+mise run hooks:install
 mise run dev      # http://127.0.0.1:3000
 mise run format
-mise run check   # Formatting and type checks
+mise run check   # Formatting, type checks, warnings-as-errors, Erlang compiler
+mise run lint    # Gleam compiler lint checks
 mise run build
 mise run test    # Uses an OS-assigned loopback port; does not need Herdr
 mise run export  # build/erlang-shipment/
@@ -44,6 +46,9 @@ mise run export  # build/erlang-shipment/
 
 Use the pinned toolchain, keep `manifest.toml` in version control, and let Gleam
 update the lockfile. Rebar3 is required to build Mist's Erlang dependencies.
+The pre-commit hook runs `mise run check` and `mise run test`. Never bypass it.
+`erlexec` also requires Make and a C++17 compiler at build time. See README for
+the local Bazzite/OpenSSL runtime-library override.
 There is no browser asset pipeline yet; add it with the xterm.js streaming work.
 
 ### Service deployment

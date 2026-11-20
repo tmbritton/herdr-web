@@ -8,10 +8,12 @@ import gleam/int
 import gleam/string
 import gleeunit
 import gleeunit/should
+import herdr_web/subprocess
 import herdr_web/web
 import mist
 
 pub fn main() {
+  let assert Ok(_) = subprocess.start_supervisor()
   gleeunit.main()
 }
 

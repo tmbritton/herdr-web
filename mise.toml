@@ -16,8 +16,16 @@ description = "Format Gleam source"
 run = "gleam format src test"
 
 [tasks.check]
-description = "Check formatting and types"
-run = ["gleam format --check src test", "gleam check"]
+description = "Check formatting, types, and compiler warnings"
+run = ["gleam format --check src test", "gleam check", "gleam build --warnings-as-errors", "bash scripts/check-erlang.sh"]
+
+[tasks.lint]
+description = "Run Gleam's compiler lint checks (warnings are errors)"
+run = "gleam build --warnings-as-errors"
+
+[tasks."hooks:install"]
+description = "Install the repository's pre-commit checks"
+run = "bash scripts/install-hooks.sh"
 
 [tasks.test]
 description = "Run the test suite"

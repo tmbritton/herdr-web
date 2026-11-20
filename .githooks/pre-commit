@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# herdr-web managed pre-commit
+set -euo pipefail
+root=$(git rev-parse --show-toplevel)
+mise -C "$root" run check
+mise -C "$root" run test

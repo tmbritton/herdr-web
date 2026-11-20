@@ -7,7 +7,7 @@ design source of truth.
 
 - [x] **0. Baseline:** Commit the scaffold and task plan; close unread HTTP request
   bodies safely. Verify the initial service packaging.
-- [ ] **1. Herdr adapter:** Verify 0.8.2 on an isolated session. Implement bounded
+- [x] **1. Herdr adapter:** Verify 0.8.2 on an isolated session. Implement bounded
   NDJSON framing, strict protocol decoding, and a monitored Erlang-port worker.
   Tests cover fragmented lines, malformed/oversized output, exits and cleanup.
 - [ ] **2. Watch streaming:** WebSocket origin validation, watch-only attachment,
@@ -37,3 +37,10 @@ require a later hands-on check; report them separately from browser simulation.
 - Baseline review found unread request bodies could be interpreted as a second
   request on a persistent HTTP connection. The split-body regression test failed
   before the fix; ordinary responses now close the connection.
+- Initial adapter tests failed before implementation. Coverage includes protocol
+  decoding, fragmented lines, demand/credit, stdin, stderr/exit codes, overflow,
+  truncated records and owner-death cleanup. Review-driven regression tests also
+  failed before fixes for cumulative stdin limits, prompt cleanup and exit races.
+  Probe findings are in `docs/HERDR_PROTOCOL.md`.
+- Standard Gleam formatting/compiler diagnostics and Erlang warnings-as-errors
+  are required by `check`; the installed pre-commit hook runs `check` and `test`.

@@ -31,6 +31,11 @@ runtime_path="$erlang_dir/bin:$herdr_dir:/usr/local/bin:/usr/bin:/bin"
 runtime_path=${runtime_path//\\/\\\\}
 runtime_path=${runtime_path//\"/\\\"}
 printf 'PATH="%s"\n' "$runtime_path" > "$release/runtime.env"
+if [[ -n "${LD_LIBRARY_PATH:-}" ]]; then
+  library_path=${LD_LIBRARY_PATH//\\/\\\\}
+  library_path=${library_path//\"/\\\"}
+  printf 'LD_LIBRARY_PATH="%s"\n' "$library_path" >> "$release/runtime.env"
+fi
 
 install -m 644 "$project_dir/deploy/herdr-web.service" "$unit_dir/herdr-web.service"
 ln -s "$release" "$release.link"

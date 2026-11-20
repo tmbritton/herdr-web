@@ -1,8 +1,10 @@
 import gleam/erlang/process
+import herdr_web/subprocess
 import herdr_web/web
 import mist
 
 pub fn main() {
+  let assert Ok(_) = subprocess.start_supervisor()
   let assert Ok(_) =
     web.handle_request
     |> mist.new
