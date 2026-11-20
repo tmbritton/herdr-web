@@ -18,6 +18,11 @@ herdr_executable=$(command -v herdr) || {
   exit 1
 }
 herdr_dir=$(dirname "$herdr_executable")
+sqlite_executable=$(command -v "${HERDR_WEB_SQLITE_EXECUTABLE:-sqlite3}") || {
+  printf 'Install sqlite3 for the read-only OpenCode history viewer.\n' >&2
+  exit 1
+}
+sqlite_dir=$(dirname "$sqlite_executable")
 
 # Each install is a separate snapshot. Development builds and future installs
 # cannot modify code loaded by a running service.
@@ -27,7 +32,7 @@ cp -R "$shipment/." "$release/"
 
 # systemd does not load interactive shell configuration or mise shims.
 # Persist the resolved runtime locations, not the entire development environment.
-runtime_path="$erlang_dir/bin:$herdr_dir:/usr/local/bin:/usr/bin:/bin"
+runtime_path="$erlang_dir/bin:$herdr_dir:$sqlite_dir:/usr/local/bin:/usr/bin:/bin"
 runtime_path=${runtime_path//\\/\\\\}
 runtime_path=${runtime_path//\"/\\\"}
 printf 'PATH="%s"\n' "$runtime_path" > "$release/runtime.env"

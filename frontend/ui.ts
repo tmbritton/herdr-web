@@ -122,6 +122,7 @@ export class BrowserUi extends Context.Service<
           fit: element("#fit", HTMLButtonElement),
           mode: element("#mode-status", HTMLElement),
           keyboard: element("#keyboard", HTMLButtonElement),
+          history: element("#full-history", HTMLAnchorElement),
           ctrl: element("#ctrl", HTMLButtonElement),
           options: element("#options", HTMLDetailsElement),
           dialog: element("#pane-dialog", HTMLDialogElement),
@@ -239,6 +240,8 @@ export class BrowserUi extends Context.Service<
         yield* Effect.sync(() => {
           const controlling = view._tag === "Controlling";
           activateDraft(pane);
+          dom.history.href = `/history/${encodeURIComponent(pane)}`;
+          dom.history.hidden = false;
           document.body.toggleAttribute("data-control", controlling);
           terminal.options.disableStdin = !controlling;
           dom.control.disabled = view._tag !== "Watching";
@@ -320,6 +323,7 @@ export class BrowserUi extends Context.Service<
           }
           dom.picker.value = id ?? "";
           if (Option.isNone(selected)) {
+            dom.history.hidden = true;
             terminal.options.disableStdin = true;
             dom.control.disabled = true;
             dom.release.disabled = true;

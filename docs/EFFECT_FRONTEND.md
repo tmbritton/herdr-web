@@ -31,6 +31,10 @@ examples use different Schema, service, stream and error-handling APIs.
   modifying a newer pending draft. Drafts stay page-local and are never replayed.
   Successful submission clears only the matching draft revision; newer edits and
   failed/cancelled submissions retain their drafts.
+- The standalone History view has its own scoped application and HTTP/UI services.
+  It schema-decodes bounded transcript pages, pins session identity, interrupts
+  superseded requests with `Stream.switchMap`, and renders content as plain text.
+  Hex-encoded UTF-8 chunks preserve NUL and codepoints across page boundaries.
 - Enable strict TypeScript and type-aware ESLint plus Effect's compiler
   diagnostics. Tests include schema boundaries, state/capability transitions,
   cancellation, cleanup, backpressure and deterministic virtual-time cases.

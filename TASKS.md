@@ -109,6 +109,20 @@ require a later hands-on check; report them separately from browser simulation.
   Checks, unit tests, and real Herdr/Chromium regressions pass; independent review
   approved the change.
 
+## Follow-up: full session history
+
+- [x] Add control-gated Home/End/Page keys and a separate read-only full-history
+  view. Key and browser tests failed before implementation. A real OpenCode 1.19.5
+  probe found the TUI's 100-message cap; the user chose a separate transcript view.
+  The view uses the pane's reported session ID and bounded read-only SQLite pages.
+  Initial browser checks reached the beginning of 240 messages, preserved long
+  Unicode output, rejected changed sessions and left database bytes unchanged.
+- Independent review found NUL truncation in SQLite text operations, omitted
+  interrupted-tool output and a harness-specific test temp path. Regressions now
+  cover these cases. Re-review approved; checks, 26 Gleam tests, 38 Effect tests,
+  two process-helper tests, production-shipment browser integration and packaging
+  validation passed.
+
 ## Remaining hands-on acceptance
 
 - [ ] Pixel 9 Fold: outer display → unfold → keyboard/dictation → rotation →
@@ -119,3 +133,5 @@ require a later hands-on check; report them separately from browser simulation.
   while a desktop client is present.
 - [ ] Confirm phone access under the tailnet's ACLs and boot/logout behavior on
   the next normal reboot (service enablement/lingering are checked separately).
+- [ ] Full history: read from Beginning through multiple pages on the phone and
+  return to the live terminal; verify any customized OpenCode navigation bindings.

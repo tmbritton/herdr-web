@@ -73,7 +73,36 @@
           <button id="release" hidden disabled>Release</button>
           <button id="fit" hidden disabled>Fit terminal</button>
           <button id="keyboard" hidden disabled>Keyboard</button>
+          <a id="full-history" href="#" target="_blank" rel="noopener" hidden
+            >Full history</a
+          >
         </div>
+      </div>
+      <div id="history" role="toolbar" aria-label="Application history">
+        <button
+          data-key="Home"
+          title="Home: oldest message available in the TUI (requires control). Use Full history for the entire session."
+          disabled
+        >
+          Top
+        </button>
+        <button data-key="PageUp" title="Page Up in the application" disabled>
+          Page up
+        </button>
+        <button
+          data-key="PageDown"
+          title="Page Down in the application"
+          disabled
+        >
+          Page down
+        </button>
+        <button
+          data-key="End"
+          title="End: latest message in OpenCode (requires control)"
+          disabled
+        >
+          Bottom
+        </button>
       </div>
       <details id="composer">
         <summary>Write a prompt</summary>

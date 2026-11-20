@@ -132,6 +132,14 @@ details[open] > summary::before {
   align-items: center;
   gap: 0.4rem;
 }
+#full-history {
+  color: #8ac6ff;
+  padding: 0.45rem;
+  white-space: nowrap;
+}
+#ownership .actions {
+  flex-wrap: wrap;
+}
 #attach {
   display: grid;
   gap: 0.3rem;
@@ -241,16 +249,20 @@ body[data-control] #mode-status {
   color: #afc0d5;
   font-size: 0.75rem;
 }
-#keys {
-  position: sticky;
-  bottom: -0.4rem;
+#keys,
+#history {
   display: flex;
   gap: 0.25rem;
   padding: 0.3rem 0;
+}
+#keys {
+  position: sticky;
+  bottom: -0.4rem;
   background: #141d27;
   z-index: 1;
 }
-#keys button {
+#keys button,
+#history button {
   flex: 1;
   min-width: 0;
   padding: 0.4rem 0.2rem;
@@ -330,7 +342,8 @@ body[data-short] #prompt {
     padding-left: 1rem;
     padding-right: 1rem;
   }
-  #keys {
+  #keys,
+  #history {
     max-width: 48rem;
   }
 }

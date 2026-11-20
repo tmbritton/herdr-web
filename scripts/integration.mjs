@@ -3,13 +3,52 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { once } from "node:events";
-import { mkdir } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import WebSocket from "ws";
 import { chromium } from "@playwright/test";
 import { stopDetached } from "./process.mjs";
 
 const session = `herdr-web-test-${process.pid}-${Date.now().toString(36)}`;
+const historyRoot = await mkdtemp(join(tmpdir(), "herdr-web-history-"));
+const historyDb = `${historyRoot}/opencode.db`;
+const historySession = "ses_00000000000000000000000001";
+const longReply =
+  "LONG_REPLY_START\n" +
+  "🙂 quoted ' text <script>bad()</script>\u0000AFTER_NUL\n".repeat(3000) +
+  "LONG_REPLY_END";
+const sqlQuote = (text) => `'${text.replaceAll("'", "''")}'`;
+const rows = Array.from({ length: 240 }, (_, i) => {
+  const id = `msg_${String(i).padStart(6, "0")}`;
+  const text =
+    i === 0
+      ? "TRANSCRIPT_BEGINNING"
+      : i === 239
+        ? longReply
+        : `Transcript message ${i}`;
+  const part =
+    i === 1
+      ? {
+          type: "tool",
+          tool: "bash",
+          state: {
+            status: "error",
+            error: "Tool execution aborted",
+            metadata: {
+              interrupted: true,
+              output: "INTERRUPTED_OUTPUT_PRESERVED",
+            },
+          },
+        }
+      : { type: "text", text };
+  return `INSERT INTO message VALUES('${id}','${historySession}',${i},${sqlQuote(JSON.stringify({ role: i % 2 ? "assistant" : "user" }))}); INSERT INTO part VALUES('prt_${String(i).padStart(6, "0")}','${id}','${historySession}',${sqlQuote(JSON.stringify(part))});`;
+});
+execFileSync("sqlite3", [historyDb], {
+  input: `CREATE TABLE session(id TEXT PRIMARY KEY,title TEXT); CREATE TABLE message(id TEXT PRIMARY KEY,session_id TEXT,time_created INTEGER,data TEXT); CREATE TABLE part(id TEXT PRIMARY KEY,message_id TEXT,session_id TEXT,data TEXT); INSERT INTO session VALUES('${historySession}','Full history fixture'); ${rows.join("\n")}`,
+});
+const historyBefore = await readFile(historyDb);
 const env = Object.fromEntries(
   Object.entries(process.env).filter(([key]) => !key.startsWith("HERDR_")),
 );
@@ -60,6 +99,7 @@ function startBridge() {
       HERDR_WEB_SESSION: session,
       HERDR_WEB_PORT: String(port),
       HERDR_WEB_ORIGINS: base,
+      HERDR_WEB_OPENCODE_DB: historyDb,
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -702,6 +742,184 @@ try {
       ),
     "previous pane output cleared on failed switch",
   );
+  const historyPane = cli(
+    "tab",
+    "create",
+    "--workspace",
+    created.result.workspace.workspace_id,
+    "--cwd",
+    process.cwd(),
+    "--label",
+    "History",
+    "--no-focus",
+  ).result.root_pane.pane_id;
+  cli("pane", "run", historyPane, "node scripts/history-fixture.mjs");
+  await until(
+    () => readPane(historyPane).includes("HISTORY_ROW_09999"),
+    "application history ready before browser attachment",
+  );
+  await options(page, true);
+  await page.locator("#pane").fill(historyPane);
+  await page.getByRole("button", { name: "Watch", exact: true }).click();
+  const historyRow = (number) =>
+    page.locator(".xterm-accessibility-tree").filter({
+      hasText: `HISTORY_ROW_${String(number).padStart(5, "0")}`,
+    });
+  await historyRow(9999).waitFor({ state: "attached" });
+  const historyButtons = ["Top", "Page up", "Page down", "Bottom"].map((name) =>
+    page.getByRole("button", { name, exact: true }),
+  );
+  for (const button of historyButtons) {
+    assert.equal(await button.count(), 1, "history navigation is available");
+    assert(await button.isDisabled(), "history input requires control");
+  }
+  await page.getByRole("button", { name: "Take control", exact: true }).click();
+  await page
+    .locator("#mode-status")
+    .filter({ hasText: "You control this pane" })
+    .waitFor();
+  await page.locator("#composer > summary").click();
+  await page.locator("#prompt").fill("history navigation must keep this draft");
+  await page.getByRole("button", { name: "Top", exact: true }).tap();
+  await historyRow(0).waitFor({ state: "attached" });
+  assert.equal(
+    await page.locator("#prompt").inputValue(),
+    "history navigation must keep this draft",
+  );
+  await page.locator("#composer > summary").click();
+  await page.getByRole("button", { name: "Page down", exact: true }).tap();
+  await historyRow(20).waitFor({ state: "attached" });
+  await historyRow(0).waitFor({ state: "detached" });
+  await page.getByRole("button", { name: "Page up", exact: true }).tap();
+  await historyRow(0).waitFor({ state: "attached" });
+  await page.getByRole("button", { name: "Bottom", exact: true }).tap();
+  await historyRow(9999).waitFor({ state: "attached" });
+  await page.reload();
+  await historyRow(9999).waitFor({ state: "attached" });
+  for (const button of historyButtons) assert(await button.isDisabled());
+  await page.getByRole("button", { name: "Take control", exact: true }).click();
+  await page.getByRole("button", { name: "Top", exact: true }).tap();
+  await historyRow(0).waitFor({ state: "attached" });
+  await page.getByRole("button", { name: "Release", exact: true }).click();
+  await page.locator("#status").filter({ hasText: "read-only" }).waitFor();
+  for (const button of historyButtons) assert(await button.isDisabled());
+  assert.equal(await page.locator("#picker").inputValue(), historyPane);
+  cli(
+    "pane",
+    "report-agent-session",
+    historyPane,
+    "--source",
+    "herdr:opencode",
+    "--agent",
+    "opencode",
+    "--session-start-source",
+    "select",
+    "--agent-session-id",
+    historySession,
+  );
+  const transcriptUrl = `${base}/api/history/${encodeURIComponent(historyPane)}`;
+  const firstResponse = await fetch(`${transcriptUrl}?start=0`);
+  assert.equal(firstResponse.status, 200, "full transcript endpoint");
+  const firstPage = await firstResponse.json();
+  assert.equal(
+    Buffer.from(firstPage.entries[0].bytes, "hex").toString(),
+    "TRANSCRIPT_BEGINNING",
+  );
+  assert.match(
+    Buffer.from(firstPage.entries[1].bytes, "hex").toString(),
+    /INTERRUPTED_OUTPUT_PRESERVED\nError: Tool execution aborted/,
+  );
+  assert.equal(firstPage.session, historySession);
+  assert(firstPage.total > 240, "long messages are chunked, not truncated");
+  const replyChunks = [];
+  for (let start = 0; start < firstPage.total; start += 16) {
+    const response = await fetch(
+      `${transcriptUrl}?start=${start}&session=${historySession}`,
+    );
+    assert.equal(response.status, 200);
+    const chunk = await response.json();
+    assert(chunk.entries.length <= 16);
+    replyChunks.push(
+      ...chunk.entries
+        .filter((entry) => entry.message === "msg_000239")
+        .map((entry) => Buffer.from(entry.bytes, "hex").subarray(0, 4096)),
+    );
+  }
+  assert.equal(
+    Buffer.concat(replyChunks).toString(),
+    longReply,
+    "complete Unicode transcript without truncation",
+  );
+  assert.equal((await fetch(`${transcriptUrl}?start=-1`)).status, 400);
+  assert.equal(
+    (await fetch(`${transcriptUrl}?start=0&session=ses_other`)).status,
+    409,
+  );
+  const [transcript] = await Promise.all([
+    page.waitForEvent("popup"),
+    page.getByRole("link", { name: "Full history", exact: true }).click(),
+  ]);
+  transcript.on("pageerror", (error) => errors.push(error.message));
+  await transcript.waitForLoadState();
+  await transcript
+    .locator("#transcript")
+    .filter({ hasText: "LONG_REPLY_END" })
+    .waitFor();
+  assert.equal(await transcript.locator("#transcript script").count(), 0);
+  await transcript
+    .getByRole("button", { name: "Beginning", exact: true })
+    .click();
+  await transcript
+    .locator("#transcript")
+    .filter({ hasText: "TRANSCRIPT_BEGINNING" })
+    .waitFor();
+  await transcript.getByRole("button", { name: "Newer", exact: true }).click();
+  await transcript
+    .locator("#transcript")
+    .filter({ hasText: "Transcript message 16" })
+    .waitFor();
+  await transcript.getByRole("button", { name: "Older", exact: true }).click();
+  await transcript
+    .locator("#transcript")
+    .filter({ hasText: "TRANSCRIPT_BEGINNING" })
+    .waitFor();
+  await transcript.getByRole("button", { name: "Latest", exact: true }).click();
+  await transcript
+    .locator("#transcript")
+    .filter({ hasText: "LONG_REPLY_END" })
+    .waitFor();
+  // History is independent of the terminal stream and cannot acquire control.
+  assert.equal(await page.locator("#picker").inputValue(), historyPane);
+  assert(
+    await page.getByRole("button", { name: "Top", exact: true }).isDisabled(),
+  );
+  cli(
+    "pane",
+    "report-agent-session",
+    historyPane,
+    "--source",
+    "herdr:opencode",
+    "--agent",
+    "opencode",
+    "--session-start-source",
+    "select",
+    "--agent-session-id",
+    "ses_00000000000000000000000002",
+  );
+  await transcript
+    .getByRole("button", { name: "Beginning", exact: true })
+    .click();
+  await transcript
+    .locator("#history-status")
+    .filter({ hasText: "session changed" })
+    .waitFor();
+  await transcript.close();
+  assert.deepEqual(
+    await readFile(historyDb),
+    historyBefore,
+    "history reads leave the database unchanged",
+  );
+  cli("pane", "close", historyPane);
   assert.deepEqual(errors, []);
   await page.close();
   const blockedStorage = await browser.newPage({
@@ -812,6 +1030,7 @@ try {
         } catch {
           /* retain logs if shutdown failed */
         }
+        await rm(historyRoot, { recursive: true, force: true });
       }
     }
   }

@@ -10,6 +10,9 @@ Initial-frame, rendered-frame and heartbeat deadlines bound attachment lifetimes
 recovery always returns to watch mode. Phone keys, a prompt composer, font sizing
 and visual-viewport handling are implemented. `TASKS.md` tracks deployment and
 remaining physical-device acceptance checks.
+The separate read-only History view resolves a pane's reported OpenCode session
+and pages through its stored transcript, including the first message. See
+`docs/HISTORY.md` for its bounded storage-reader design.
 
 The integration spike verified the installed Herdr 0.8.2 against disposable
 workloads; findings are in `docs/HERDR_PROTOCOL.md`. `erlexec` manages OS subprocess
@@ -145,6 +148,21 @@ failures/cancellations and edits made while sending retain it. Toolbar Enter
 submits the focused composer, or sends a terminal Enter otherwise. Ownership is
 revalidated before a delayed Enter. This avoids assuming paste mode or using a
 separate pane API that bypasses stream ownership. See `docs/HERDR_PROTOCOL.md`.
+
+### Conversation history
+
+Herdr streams screen repaints, rather than a complete conversation log. Home/End
+and Page Up/Down controls navigate the application's retained history while
+controlling. A real OpenCode 1.19.5 probe confirmed its TUI loads only the latest
+100 messages, so those keys alone cannot reach the first message of a long session.
+
+The user chose a separate **Full history** view. It resolves the OpenCode session
+from `herdr pane get`, reads the configured local database with `sqlite3 -readonly`,
+and renders plain text in a separate browser tab. Beginning/Older/Newer/Latest
+request bounded pages; very large parts span pages without truncation. Expected
+session identity pins subsequent reads, and switching requests cancels obsolete
+HTTP work. This view never acquires terminal control. It depends on the verified
+OpenCode storage schema, independently of the live terminal protocol.
 
 ## Tailscale deployment
 

@@ -5,6 +5,8 @@ pub type Config {
     origins: List(String),
     port: Int,
     timeouts: lifecycle.Timeouts,
+    sqlite: String,
+    history_database: String,
   )
 }
 
@@ -15,6 +17,8 @@ pub fn default() -> Config {
     ["http://127.0.0.1:3000", "http://localhost:3000"],
     3000,
     lifecycle.defaults(),
+    "sqlite3",
+    "",
   )
 }
 
@@ -37,6 +41,13 @@ pub fn load() -> Config {
     origins,
     port,
     cfg.timeouts,
+    env("HERDR_WEB_SQLITE_EXECUTABLE") |> result.unwrap(cfg.sqlite),
+    env("HERDR_WEB_OPENCODE_DB")
+      |> result.unwrap(
+        env("XDG_DATA_HOME")
+        |> result.unwrap(env("HOME") |> result.unwrap("") <> "/.local/share")
+        <> "/opencode/opencode.db",
+      ),
   )
 }
 

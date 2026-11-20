@@ -21,6 +21,19 @@ it.effect(
     }),
 );
 
+it.effect("sends application history keys, including their Ctrl variants", () =>
+  Effect.gen(function* () {
+    assert.equal(yield* keyInput("Home", false), "\x1b[H");
+    assert.equal(yield* keyInput("End", false), "\x1b[F");
+    assert.equal(yield* keyInput("PageUp", false), "\x1b[5~");
+    assert.equal(yield* keyInput("PageDown", false), "\x1b[6~");
+    assert.equal(yield* keyInput("Home", true), "\x1b[1;5H");
+    assert.equal(yield* keyInput("End", true), "\x1b[1;5F");
+    assert.equal(yield* keyInput("PageUp", true), "\x1b[5;5~");
+    assert.equal(yield* keyInput("PageDown", true), "\x1b[6;5~");
+  }),
+);
+
 it.effect(
   "never sends a delayed Enter after the prompt loses its attachment",
   () =>

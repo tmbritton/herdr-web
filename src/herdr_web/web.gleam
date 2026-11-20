@@ -3,9 +3,11 @@ import gleam/http.{Get, Head}
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/list
+import gleam/option
 import gleam/result
 import gleam/uri
 import herdr_web/config.{type Config}
+import herdr_web/history
 import herdr_web/socket
 import herdr_web/subprocess
 import mist.{type ResponseData}
@@ -20,6 +22,45 @@ pub fn handle(
   req: Request(mist.Connection),
 ) -> Response(ResponseData) {
   case req.method, request.path_segments(req) {
+    Get, ["api", "history", encoded] -> {
+      let pane = uri.percent_decode(encoded) |> result.unwrap("")
+      let host = request.get_header(req, "host") |> result.unwrap("")
+      let query =
+        req.query |> option.unwrap("") |> uri.parse_query |> result.unwrap([])
+      let start =
+        list.key_find(query, "start")
+        |> result.unwrap("latest")
+        |> history.page_start
+      let expected = list.key_find(query, "session") |> result.unwrap("")
+      let res = case
+        config.allowed_host(cfg, host),
+        config.valid_pane(pane),
+        start
+      {
+        False, _, _ -> text(403, "Forbidden")
+        True, True, Ok(start) -> {
+          case history.read_page(cfg, pane, start, expected) {
+            Ok(body) ->
+              text(200, body)
+              |> response.set_header("content-type", "application/json")
+            Error(#(status, message)) -> text(status, message)
+          }
+        }
+        _, _, _ -> text(400, "Invalid history request")
+      }
+      res
+      |> response.set_header("connection", "close")
+      |> response.set_header("cache-control", "no-store")
+      |> response.set_header("x-content-type-options", "nosniff")
+    }
+    Get, ["history", encoded] -> {
+      let pane = uri.percent_decode(encoded) |> result.unwrap("")
+      case config.valid_pane(pane) {
+        True -> asset_response("history.html", "text/html; charset=utf-8")
+        False -> text(400, "Invalid pane")
+      }
+      |> response.set_header("connection", "close")
+    }
     Get, ["api", "panes"] -> {
       let host = request.get_header(req, "host") |> result.unwrap("")
       let res = case config.allowed_host(cfg, host) {
@@ -91,6 +132,10 @@ fn get(path: String) -> Response(ResponseData) {
     "/assets/app.js" ->
       asset_response("app.js", "text/javascript; charset=utf-8")
     "/assets/app.css" -> asset_response("app.css", "text/css; charset=utf-8")
+    "/assets/history.js" ->
+      asset_response("history.js", "text/javascript; charset=utf-8")
+    "/assets/history.css" ->
+      asset_response("history.css", "text/css; charset=utf-8")
     // Liveness only: this does not imply that Herdr is connected or ready.
     "/healthz" -> text(200, "ok\n")
     _ -> text(404, "Not found\n")

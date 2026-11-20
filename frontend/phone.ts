@@ -10,6 +10,10 @@ export const TouchKey = Schema.Literals([
   "ArrowRight",
   "ControlC",
   "Enter",
+  "Home",
+  "End",
+  "PageUp",
+  "PageDown",
 ]);
 export const PasteStyle = Schema.Literals(["bracketed", "plain"]);
 
@@ -22,12 +26,20 @@ const keys: Record<typeof TouchKey.Type, string> = {
   ArrowRight: "\x1b[C",
   ControlC: "\x03",
   Enter: "\r",
+  Home: "\x1b[H",
+  End: "\x1b[F",
+  PageUp: "\x1b[5~",
+  PageDown: "\x1b[6~",
 };
-const controlArrows = new Map([
+const controlNavigation = new Map([
   ["\x1b[A", "\x1b[1;5A"],
   ["\x1b[B", "\x1b[1;5B"],
   ["\x1b[C", "\x1b[1;5C"],
   ["\x1b[D", "\x1b[1;5D"],
+  ["\x1b[H", "\x1b[1;5H"],
+  ["\x1b[F", "\x1b[1;5F"],
+  ["\x1b[5~", "\x1b[5;5~"],
+  ["\x1b[6~", "\x1b[6;5~"],
 ]);
 const decodeInput = Schema.decodeUnknownEffect(InputText);
 export const terminalInput = Effect.fnUntraced(function* (
@@ -36,8 +48,8 @@ export const terminalInput = Effect.fnUntraced(function* (
 ) {
   let input = text;
   if (ctrl) {
-    const arrow = controlArrows.get(text);
-    if (arrow !== undefined) input = arrow;
+    const navigation = controlNavigation.get(text);
+    if (navigation !== undefined) input = navigation;
     else {
       const code = text.toUpperCase().charCodeAt(0);
       if (

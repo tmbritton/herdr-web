@@ -7,6 +7,8 @@ Gleam on the BEAM, Mist, Effect, xterm.js, and private access through Tailscale 
 `http://127.0.0.1:3000` to browse existing Herdr tabs and panes. Every attachment
 starts in watch mode. Lifecycle recovery, touch keys, font sizing and a multiline
 prompt composer are implemented. `/healthz` checks bridge liveness.
+**Full history** opens a read-only OpenCode transcript with access to the session's
+beginning, beyond the terminal application's retained view.
 
 ## Tooling and deployment choice
 
@@ -93,6 +95,15 @@ desktop-TUI handoff and Pixel Fold transitions still need hands-on validation.
 
 ### Phone workflow
 
+- **Full history** opens the selected pane's OpenCode transcript in a new tab,
+  available in watch mode. **Beginning** jumps to the first stored message;
+  **Older**/**Newer** move through bounded pages and **Latest** refreshes the end.
+  Text, reasoning and tool output are plain text; large entries continue across
+  pages. The view reads the local OpenCode database without sending terminal input.
+- **Top**, **Page up**, **Page down** and **Bottom** send Home, Page Up, Page Down
+  and End to the controlled application. OpenCode 1.19.5 retains only 100 messages
+  in its TUI, so use **Full history** for older content. Other applications and
+  customized keybindings may interpret these keys differently.
 - **Keyboard** focuses the live terminal input. The bottom toolbar provides
   `Esc`, `Tab`, arrows, `Ctrl`, `Ctrl+C` and `Enter`. Ctrl is a one-shot modifier
   for the next terminal key; input remains disabled in watch mode.
@@ -129,9 +140,15 @@ Configuration is read at startup:
 | `HERDR_WEB_SESSION` | Unset: use the default Herdr session |
 | `HERDR_WEB_ORIGINS` | Comma-separated exact origins; defaults to `http://127.0.0.1:3000,http://localhost:3000` |
 | `HERDR_WEB_EXECUTABLE` | `herdr`; override the CLI executable path if necessary |
+| `HERDR_WEB_SQLITE_EXECUTABLE` | `sqlite3`; SQLite CLI with JSON support for read-only history |
+| `HERDR_WEB_OPENCODE_DB` | `$XDG_DATA_HOME/opencode/opencode.db`, or `$HOME/.local/share/opencode/opencode.db` |
 
 For Tailscale Serve, include its exact HTTPS origin in `HERDR_WEB_ORIGINS` and
 restart the bridge. WebSocket requests require both an allowed Origin and Host.
+History requires a local OpenCode database and Herdr's reported OpenCode session
+identity. Install SQLite 3.38+ (`sqlite3`) for this feature and the integration
+tests. See [`docs/HISTORY.md`](docs/HISTORY.md) for the verified storage format and
+pagination behavior.
 
 ### Quality checks and native dependencies
 
@@ -165,7 +182,7 @@ environment. Use a host-compatible OTP build or library path on another machine.
 
 ## Background service
 
-On Linux with systemd, make `herdr` available on your shell's `PATH`, then:
+On Linux with systemd, make `herdr` and `sqlite3` available on your shell's `PATH`, then:
 
 ```bash
 mise run service:install
@@ -180,7 +197,7 @@ The installer builds and copies an independent production snapshot into
 `~/.local/share/herdr-web/releases/`, points `current` at it, and installs
 [`deploy/herdr-web.service`](deploy/herdr-web.service) into
 `${XDG_CONFIG_HOME:-~/.config}/systemd/user/`. It records the resolved Erlang and
-Herdr binary directories in the snapshot's `runtime.env`, so systemd does not
+Herdr and SQLite binary directories in the snapshot's `runtime.env`, so systemd does not
 depend on interactive shell initialization. The installer itself does not start
 or restart the service.
 

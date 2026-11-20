@@ -36,6 +36,14 @@ session rather than the user's running panes. Source cross-check: upstream tag
   to joining several independent list calls for navigation.
 - Moving a pane to another workspace changes its public `pane_id` while retaining
   `terminal_id`. Navigation reconciles by terminal identity before closure fallback.
+- `pane get` exposes the OpenCode identity under `result.pane.agent_session`
+  (`agent=opencode`, `kind=id`, `value=ses_…`). The separate read-only History view
+  resolves this identity to the local OpenCode database. Herdr's official session
+  reports require a detected matching agent; disposable test fixtures reproduce
+  this with a process titled `opencode` and source `herdr:opencode`.
+- OpenCode 1.19.5's TUI retains only the latest 100 messages (verified with a
+  240-message imported session). Home/End navigate that retained view. Full
+  transcript access uses the separate paginated view described in `HISTORY.md`.
 
 The transport caps queued output at 1 MiB / 128 records, delivers records only on
 demand, caps stderr at 4 KiB and input writes at 64 KiB, and monitors the attachment

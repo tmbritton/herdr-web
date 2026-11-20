@@ -13,6 +13,8 @@ output, pane discovery, header navigation and explicit control are implemented.
 The frontend uses Effect 4.1.4. Initial-frame, render-ack and heartbeat deadlines
 are implemented, along with phone keys, prompt composition, font sizing and
 visual-viewport handling. See `TASKS.md` for remaining deployment/device checks.
+Read-only full OpenCode history is available through a separate paginated view;
+see `docs/HISTORY.md` for the storage contract and the TUI's 100-message limit.
 `/healthz` only
 checks bridge liveness. See `TASKS.md` for progress and `docs/HERDR_PROTOCOL.md`
 for verified 0.8.2 behavior.
@@ -29,6 +31,7 @@ for verified 0.8.2 behavior.
 - `src/herdr_web.gleam`: startup, loopback binding, and process lifetime.
 - `src/herdr_web/web.gleam`: HTTP handler, browser assets and WebSocket routing.
 - `src/herdr_web/socket.gleam`: attachment lifecycle and browser protocol.
+- `src/herdr_web/history.gleam`: bounded, read-only OpenCode transcript queries.
 - `src/herdr_web_process*.erl`: bounded subprocess transport and OTP supervision.
 - `frontend/`: Effect/TypeScript schemas, services, state machine, xterm.js UI and tests.
 - `test/herdr_web_test.gleam`: Gleeunit runner and real HTTP integration test.
@@ -92,7 +95,10 @@ Use **Effect 4**, following `docs/EFFECT_FRONTEND.md` and the pinned package's
 
 Use mise for development and systemd for the installed application. The production
 shipment needs Erlang at runtime, but not Gleam, Rebar3, or mise. Run as the same
-user as Herdr. The bridge service must attach to separately managed persistent
+user as Herdr. Full history also needs `sqlite3` with JSON support; the installer
+records its binary directory. Keep database reads read-only, output bounded,
+session identities pinned between pages, and transcript content rendered as text.
+The bridge service must attach to separately managed persistent
 workloads, not own their lifetime.
 
 `mise run service:install` exports and installs an independent snapshot in
