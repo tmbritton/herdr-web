@@ -29,7 +29,7 @@ design source of truth.
 - [x] **6. Phone workflow:** Responsive viewport/keyboard handling, font controls,
   touch keys and multiline paste-aware composer. Browser tests at narrow, wide,
   short and tall sizes, then review/commit/push.
-- [ ] **7. Deployment:** Install and validate the final systemd snapshot; configure
+- [x] **7. Deployment:** Install and validate the final systemd snapshot; configure
   private access without disturbing existing Serve routes; document device checks.
 
 ## Validation boundaries
@@ -85,3 +85,28 @@ require a later hands-on check; report them separately from browser simulation.
   hide, reconnect and ownership loss. Four lifecycle regressions pass. The Ctrl+C
   browser assertion now requires executed output, not echoed input. Re-review
   approved; checks, 24 Gleam tests, 34 Effect tests and browser integration passed.
+- Deployment configuration had a failing installed-service check (403 for the
+  configured Serve Host) before adding the optional service environment file;
+  the check now passes. HTTPS health/discovery and WSS origin validation have
+  passed through private Serve on port 10000. The integration suite now runs the
+  exported shipment and verifies that a controlled workload survives bridge
+  shutdown/restart with its shell state intact.
+- Packaging review found a shutdown timeout could discard the bridge handle.
+  A failing OS-process regression now covers an ignored SIGTERM; bounded cleanup
+  retains ownership, escalates to SIGKILL when needed, and awaits termination.
+  Both helper tests, the full unit gates, and production-shipment integration pass.
+- Final packaging re-review approved. The installed user service is active and
+  enabled with lingering enabled. Local and private HTTPS/WSS smoke tests pass;
+  Serve uses port 10000 alongside the existing 443/8443 endpoints. Physical-device,
+  live OpenCode and desktop-TUI acceptance checks below are not claimed as tested.
+
+## Remaining hands-on acceptance
+
+- [ ] Pixel 9 Fold: outer display → unfold → keyboard/dictation → rotation →
+  split-screen → fold → lock/unlock; keep selected pane and running agent.
+- [ ] Real OpenCode TUI: watch an active turn, take control, submit a prompt with
+  the matching paste style, release and reconnect.
+- [ ] Desktop TUI: verify preferred control takeover/release and geometry handoff
+  while a desktop client is present.
+- [ ] Confirm phone access under the tailnet's ACLs and boot/logout behavior on
+  the next normal reboot (service enablement/lingering are checked separately).

@@ -36,6 +36,8 @@ export default ts.config(
         URL: "readonly",
         fetch: "readonly",
         Buffer: "readonly",
+        AbortSignal: "readonly",
+        AbortController: "readonly",
         setInterval: "readonly",
         clearInterval: "readonly",
       },

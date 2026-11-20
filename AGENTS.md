@@ -63,6 +63,9 @@ build-time dependencies. `check` also runs Effect's TypeScript compiler diagnost
 type-aware ESLint and Prettier; `test` runs Gleam and Effect/Vitest tests (two workers).
 `mise exec -- npm run test:integration` uses
 a disposable named Herdr session plus Chromium (install it with Playwright).
+It exports and runs the production shipment, including a bridge-restart test that
+must preserve the separately managed workload. `npm run test:service -- <origin>`
+is a read-only smoke test for an installed instance and its configured origin.
 
 ### Frontend correctness
 
@@ -97,6 +100,9 @@ updates the `current` symlink without starting/restarting the service. Use
 `mise run service:stop` before running development on the same port. After an
 update, use `systemctl --user restart herdr-web.service`. Boot/logout behavior
 depends on user lingering; see `README.md`.
+Application settings live in optional `~/.config/herdr-web/environment`, separate
+from generated release runtime paths. Validate exact origins when changing Serve
+configuration and preserve any other services' routes.
 
 ## Intended architecture
 

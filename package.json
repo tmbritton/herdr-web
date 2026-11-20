@@ -6,9 +6,10 @@
     "build": "node scripts/build.mjs",
     "format": "prettier --write frontend scripts/*.mjs package.json tsconfig.json eslint.config.mjs vitest.config.ts",
     "check": "prettier --check frontend scripts/*.mjs package.json tsconfig.json eslint.config.mjs vitest.config.ts && effect-tsgo tsc@7.0.2 --noEmit -p tsconfig.json && eslint frontend scripts/*.mjs vitest.config.ts",
-    "test": "vitest run",
-    "pretest:integration": "npm run build",
-    "test:integration": "node scripts/integration.mjs"
+    "test": "vitest run && node --test scripts/*.test.mjs",
+    "pretest:integration": "npm run build && gleam export erlang-shipment",
+    "test:integration": "node scripts/integration.mjs",
+    "test:service": "node scripts/service-smoke.mjs"
   },
   "dependencies": {
     "@effect/platform-browser": "4.1.4",

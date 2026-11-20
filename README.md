@@ -52,8 +52,10 @@ mise run export   # Production bundle in build/erlang-shipment/
 ```
 
 Unit tests do not require Herdr. The optional `mise exec -- npm run test:integration`
-creates and cleans up its own named Herdr session and runs real WebSocket and
-Chromium checks. Install Chromium once with `mise exec -- npx playwright install
+exports the production shipment, creates and cleans up its own named Herdr
+session, and runs real WebSocket and Chromium checks. It also restarts the bridge
+while controlling a pane and verifies that the workload's state survives.
+Install Chromium once with `mise exec -- npx playwright install
 chromium`. Existing panes are not used by the test.
 
 The pane picker refreshes every five seconds, groups by workspace/tab, and uses
@@ -134,7 +136,8 @@ diagnostics. `mise run check` checks formatting, runs `gleam check`, builds with
 `--warnings-as-errors`, and compiles Erlang interoperability modules with
 `erlc -Werror`. Browser code uses strict TypeScript, type-aware ESLint, Prettier,
 and Effect's compiler diagnostics (`@effect/tsgo`). Runtime tests use
-`@effect/vitest`, including virtual clocks, property tests and cancellation tests.
+`@effect/vitest`, including virtual clocks, property tests and cancellation tests,
+plus Node tests for deployment-process cleanup.
 The installed pre-commit hook runs `check` and `test`; reinstall it
 with `mise run hooks:install` after cloning or changing the hook.
 
@@ -164,7 +167,7 @@ On Linux with systemd, make `herdr` available on your shell's `PATH`, then:
 mise run service:install
 mise run service:start
 systemctl --user status herdr-web.service
-curl --fail http://127.0.0.1:3000/healthz
+curl --retry 10 --retry-connrefused --retry-delay 1 --fail http://127.0.0.1:3000/healthz
 ```
 
 Stop any foreground development instance first; both use port 3000.
@@ -176,6 +179,44 @@ The installer builds and copies an independent production snapshot into
 Herdr binary directories in the snapshot's `runtime.env`, so systemd does not
 depend on interactive shell initialization. The installer itself does not start
 or restart the service.
+
+### Service configuration and private HTTPS
+
+The unit also reads the optional `~/.config/herdr-web/environment` file. This
+file is independent of installed snapshots. For example:
+
+```ini
+HERDR_WEB_SESSION=default
+HERDR_WEB_ORIGINS=http://127.0.0.1:3000,http://localhost:3000,https://device.tailnet-name.ts.net:10000
+```
+
+Use the exact HTTPS origin shown for your device, including a non-default port.
+Restart the service after changing this file. If changing `HERDR_WEB_PORT`, update
+the allowed local origins and the Serve target as well.
+
+Inspect existing Serve endpoints, then choose a free HTTPS port:
+
+```bash
+tailscale serve status
+systemctl --user restart herdr-web.service
+tailscale serve --bg --https=10000 http://127.0.0.1:3000
+```
+
+The phone opens `https://device.tailnet-name.ts.net:10000/` while connected to
+Tailscale. Serve supplies TLS and tailnet access rules govern access. The initial
+deployment uses port 10000 because ports 443 and 8443 already host other services.
+Serve's background configuration persists across Tailscale restarts/reboots.
+
+Verify the installed service (requires a reachable Herdr server):
+
+```bash
+mise exec -- npm run test:service -- http://127.0.0.1:3000
+mise exec -- npm run test:service -- https://device.tailnet-name.ts.net:10000
+```
+
+This read-only smoke test checks health, schema-validated discovery, WebSocket
+upgrade using a nonexistent pane, and rejection of an untrusted origin. To remove
+this Serve endpoint later, use `tailscale serve --https=10000 off`.
 
 `service:start` enables and starts the service. To start at boot and keep running
 after logout, enable user lingering once:

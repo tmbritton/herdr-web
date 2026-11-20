@@ -149,10 +149,15 @@ API that bypasses stream ownership. See `docs/HERDR_PROTOCOL.md`.
 Bind the Gleam application to `127.0.0.1:3000`, then expose it privately through Tailscale Serve:
 
 ```bash
-tailscale serve --bg 3000
+tailscale serve --bg --https=10000 http://127.0.0.1:3000
 ```
 
 The phone connects through Tailscale and opens the Serve HTTPS URL. Serve handles TLS, and tailnet access rules control who can reach the service. For this personal tool, restricted tailnet access can provide the access boundary without a separate account system. Keep the backend localhost-only and validate the browser's WebSocket origin.
+
+Inspect existing Serve routes before choosing a port. The initial deployment uses
+HTTPS port 10000 alongside existing services on 443 and 8443. Configure the exact
+HTTPS origin in `~/.config/herdr-web/environment`; the unit reads that optional
+file separately from its installed runtime snapshot. See README for commands.
 
 ## Implementation plan
 

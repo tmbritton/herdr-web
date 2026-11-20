@@ -7,6 +7,7 @@ StartLimitBurst=5
 Type=exec
 WorkingDirectory=%h/.local/share/herdr-web/current
 EnvironmentFile=%h/.local/share/herdr-web/current/runtime.env
+EnvironmentFile=-%h/.config/herdr-web/environment
 Environment=SHELL=/bin/sh
 # A relative entrypoint keeps this process in its release directory even when
 # the installer switches the current symlink to a newer release.

@@ -7,6 +7,7 @@ import { mkdir } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import WebSocket from "ws";
 import { chromium } from "@playwright/test";
+import { stopDetached } from "./process.mjs";
 
 const session = `herdr-web-test-${process.pid}-${Date.now().toString(36)}`;
 const env = Object.fromEntries(
@@ -50,6 +51,27 @@ let bridge;
 let browser;
 let bridgeLog = "";
 const sockets = [];
+function startBridge() {
+  const child = spawn("/bin/sh", ["./entrypoint.sh", "run"], {
+    cwd: "build/erlang-shipment",
+    detached: true,
+    env: {
+      ...env,
+      HERDR_WEB_SESSION: session,
+      HERDR_WEB_PORT: String(port),
+      HERDR_WEB_ORIGINS: base,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  for (const stream of [child.stdout, child.stderr])
+    stream.on("data", (data) => {
+      bridgeLog = (bridgeLog + String(data)).slice(-8000);
+    });
+  child.on("error", (error) => {
+    bridgeLog += error.message;
+  });
+  return child;
+}
 async function until(fn, description, attempts = 100) {
   for (let attempt = 0; attempt < attempts; attempt++) {
     try {
@@ -159,20 +181,7 @@ try {
     .exec(readPane(pane))
     .slice(1);
   const before = cli("api", "snapshot").result.snapshot;
-  bridge = spawn("gleam", ["run"], {
-    detached: true,
-    env: {
-      ...env,
-      HERDR_WEB_SESSION: session,
-      HERDR_WEB_PORT: String(port),
-      HERDR_WEB_ORIGINS: base,
-    },
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  for (const stream of [bridge.stdout, bridge.stderr])
-    stream.on("data", (data) => {
-      bridgeLog = (bridgeLog + String(data)).slice(-8000);
-    });
+  bridge = startBridge();
   await until(
     async () => (await fetch(`${base}/healthz`)).ok,
     "bridge startup",
@@ -659,6 +668,62 @@ try {
     .waitFor({ state: "attached" });
   assert.deepEqual(errors, []);
   await blockedStorage.close();
+  const restartController = connect(pane);
+  await once(restartController.ws, "open");
+  await frame(restartController, "watch");
+  command(restartController, { type: "control", takeover: false });
+  await frame(restartController, "control");
+  cli(
+    "pane",
+    "run",
+    pane,
+    "HERDR_BRIDGE_PERSIST=alive; printf 'RESTART_%s\\n' ARMED",
+  );
+  await until(
+    () => readPane(pane).includes("RESTART_ARMED"),
+    "persistent workload setup",
+  );
+  const previousBridge = bridge;
+  await stopDetached(previousBridge);
+  bridge = undefined;
+  await until(
+    () => restartController.ws.readyState === WebSocket.CLOSED,
+    "bridge shutdown disconnect",
+  );
+  await until(
+    () =>
+      !execFileSync("ps", ["-eo", "args"], { encoding: "utf8" })
+        .split("\n")
+        .some(
+          (line) =>
+            line.includes(session) && line.includes("terminal session control"),
+        ),
+    "bridge shutdown released control",
+  );
+  assert.equal(server.exitCode, null);
+  assert.equal(
+    cli("pane", "get", pane).result.pane.terminal_id,
+    created.result.root_pane.terminal_id,
+  );
+  bridge = startBridge();
+  await until(
+    async () => (await fetch(`${base}/healthz`)).ok,
+    "bridge restart",
+  );
+  const recovered = connect(pane);
+  await once(recovered.ws, "open");
+  assert.equal((await frame(recovered, "watch")).meta.full, true);
+  recovered.ws.close();
+  cli(
+    "pane",
+    "run",
+    pane,
+    "printf 'RESTART_STATE_%s\\n' \"$HERDR_BRIDGE_PERSIST\"",
+  );
+  await until(
+    () => readPane(pane).includes("RESTART_STATE_alive"),
+    "workload state survived bridge restart",
+  );
   await until(() => {
     const processes = execFileSync("ps", ["-eo", "args"], { encoding: "utf8" });
     return !processes
@@ -669,30 +734,30 @@ try {
       );
   }, "observer cleanup");
   console.log(
-    "PASS: real Herdr streaming/control/lifecycle, phone keys and composer, font persistence, responsive layouts/reload, pane navigation, desktop non-interference and process cleanup",
+    "PASS: real Herdr streaming/control/lifecycle, phone workflow, responsive layouts, desktop non-interference, process cleanup and workload survival across bridge restart",
   );
 } finally {
   for (const socket of sockets) socket.terminate();
-  if (browser) await browser.close();
-  if (bridge) {
-    try {
-      process.kill(-bridge.pid, "SIGTERM");
-    } catch {
-      /* already exited */
-    }
-  }
   try {
-    cli("server", "stop");
+    if (browser) await browser.close();
   } finally {
-    server.kill("SIGTERM");
     try {
-      execFileSync("herdr", ["session", "delete", session], {
-        env,
-        stdio: "ignore",
-        timeout: 15000,
-      });
-    } catch {
-      /* retain logs if shutdown failed */
+      await stopDetached(bridge);
+    } finally {
+      try {
+        cli("server", "stop");
+      } finally {
+        server.kill("SIGTERM");
+        try {
+          execFileSync("herdr", ["session", "delete", session], {
+            env,
+            stdio: "ignore",
+            timeout: 15000,
+          });
+        } catch {
+          /* retain logs if shutdown failed */
+        }
+      }
     }
   }
 }
