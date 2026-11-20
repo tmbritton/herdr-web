@@ -1,0 +1,22 @@
+[Unit]
+Description=Herdr Web Terminal Bridge
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=exec
+WorkingDirectory=%h/.local/share/herdr-web/current
+EnvironmentFile=%h/.local/share/herdr-web/current/runtime.env
+# A relative entrypoint keeps this process in its release directory even when
+# the installer switches the current symlink to a newer release.
+ExecStart=/bin/sh ./entrypoint.sh run
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+KillMode=control-group
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=herdr-web
+
+[Install]
+WantedBy=default.target

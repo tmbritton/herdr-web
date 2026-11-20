@@ -1,0 +1,45 @@
+[tools]
+gleam = "1.19.2"
+erlang = "29.1.1"
+rebar = "3.28.0"
+
+[tasks.dev]
+description = "Run the bridge on http://127.0.0.1:3000"
+run = "gleam run"
+
+[tasks.build]
+description = "Compile the application"
+run = "gleam build"
+
+[tasks.format]
+description = "Format Gleam source"
+run = "gleam format src test"
+
+[tasks.check]
+description = "Check formatting and types"
+run = ["gleam format --check src test", "gleam check"]
+
+[tasks.test]
+description = "Run the test suite"
+run = "gleam test"
+
+[tasks.export]
+description = "Build a production Erlang shipment"
+run = "gleam export erlang-shipment"
+
+[tasks."service:install"]
+description = "Export and install a user service (does not start it)"
+depends = ["export"]
+run = "bash scripts/install-service.sh"
+
+[tasks."service:start"]
+description = "Enable the installed service at login/boot and start it"
+run = "systemctl --user enable --now herdr-web.service"
+
+[tasks."service:stop"]
+description = "Stop the installed service"
+run = "systemctl --user stop herdr-web.service"
+
+[tasks."service:logs"]
+description = "Follow the service journal"
+run = "journalctl --user -u herdr-web.service -f"

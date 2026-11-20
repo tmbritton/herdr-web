@@ -1,0 +1,5 @@
+/build/
+/erl_crash.dump
+/.env
+/.env.*
+/mise.local.toml
