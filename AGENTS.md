@@ -9,7 +9,8 @@ a practical project for learning Gleam and OTP.
 
 The bridge serves a watch-only xterm.js terminal and `/healthz` on
 `127.0.0.1:3000`. Supervised Herdr streams, exact WebSocket origins and bounded
-output are implemented; discovery and explicit control are next. `/healthz` only
+output, pane discovery and header navigation are implemented; explicit control
+is next. `/healthz` only
 checks bridge liveness. See `TASKS.md` for progress and `docs/HERDR_PROTOCOL.md`
 for verified 0.8.2 behavior.
 

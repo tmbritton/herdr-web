@@ -13,7 +13,7 @@ design source of truth.
 - [x] **2. Watch streaming:** WebSocket origin validation, watch-only attachment,
   browser asset build, xterm.js display with initial geometry and fresh snapshots.
   Test real WebSocket traffic and rendering; no input in watch mode.
-- [ ] **3. Discovery/navigation:** Read-only pane/tab discovery, stable IDs and
+- [x] **3. Discovery/navigation:** Read-only pane/tab discovery, stable IDs and
   ordering, picker and header previous/next/swipes, one visible live attachment.
   Test changes in topology, fallback, and independent desktop focus.
 - [ ] **4. Control:** Explicit acquire/takeover/release, input and resize
@@ -48,3 +48,7 @@ require a later hands-on check; report them separately from browser simulation.
   Real Herdr/Chromium integration verifies full frames, fresh reattachment,
   rejected origins/input, unchanged desktop layout/focus and observer cleanup.
   The hook now includes TypeScript, ESLint, Prettier and browser unit tests.
+- Discovery consumes one successful bounded CLI snapshot. Selection/order tests
+  failed before implementation. Real browser checks cover automatic selection,
+  additions, previous/next, header swipes, terminal gesture isolation, closure
+  fallback, one retained terminal instance and unchanged desktop focus.

@@ -98,6 +98,13 @@ pub fn stderr_retains_bytes_at_unicode_boundary_test() {
   bit_array.to_string(diagnostic) |> should.be_error
 }
 
+pub fn discovery_command_requires_one_successful_record_test() {
+  child.run("/usr/bin/printf", ["%s\n", "{\"result\":{}}"])
+  |> should.equal(Ok("{\"result\":{}}"))
+  child.run("/bin/sh", ["-c", "printf 'partial\\n'; exit 3"]) |> should.be_error
+  child.run("/usr/bin/printf", ["one\ntwo\n"]) |> should.be_error
+}
+
 @external(erlang, "herdr_test_ffi", "non_reader_input_is_bounded")
 fn non_reader_input_is_bounded() -> Bool
 

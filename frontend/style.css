@@ -67,3 +67,32 @@ form {
 input {
   width: 9rem;
 }
+#pane-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  touch-action: pan-y;
+  flex: 1 0 100%;
+  min-width: 0;
+}
+#position {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+#pane-nav button {
+  flex: none;
+}
+#picker {
+  max-width: 90vw;
+}
+#discovery {
+  font-size: 0.8rem;
+  color: #e5bc65;
+}
+details form {
+  padding-top: 0.5rem;
+}

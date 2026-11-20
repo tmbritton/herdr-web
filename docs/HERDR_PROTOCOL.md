@@ -26,6 +26,8 @@ session rather than the user's running panes. Source cross-check: upstream tag
 - `herdr api snapshot` returns coherent workspace, tab, pane and layout metadata
   in one read-only request, including stable IDs and desktop focus. It is preferable
   to joining several independent list calls for navigation.
+- Moving a pane to another workspace changes its public `pane_id` while retaining
+  `terminal_id`. Navigation reconciles by terminal identity before closure fallback.
 
 The transport caps queued output at 1 MiB / 128 records, delivers records only on
 demand, caps stderr at 4 KiB and input writes at 64 KiB, and monitors the attachment

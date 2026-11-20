@@ -2,9 +2,9 @@
 
 A mobile-friendly browser bridge to persistent Herdr terminal panes, built around Gleam on the BEAM, Mist, xterm.js, and private access through Tailscale Serve.
 
-**Status:** Live watch streaming. Enter a pane ID to watch its rendered terminal
-in xterm.js at `http://127.0.0.1:3000`. Pane discovery and interactive control are
-the next implementation milestones. `/healthz` checks bridge liveness.
+**Status:** Live watch streaming with pane discovery and navigation. Open
+`http://127.0.0.1:3000` to browse existing Herdr tabs and panes. Interactive control
+is the next milestone. `/healthz` checks bridge liveness.
 
 ## Tooling and deployment choice
 
@@ -54,7 +54,12 @@ creates and cleans up its own named Herdr session and runs real WebSocket and
 Chromium checks. Install Chromium once with `mise exec -- npx playwright install
 chromium`. Existing panes are not used by the test.
 
-For watch mode, enter a stable pane ID from `herdr pane list`. The terminal keeps
+The pane picker refreshes every five seconds, groups by workspace/tab, and uses
+row-major layout order. Selection follows pane identity through rearrangements;
+when a pane closes, the next pane at its previous position (or the last remaining
+pane) is selected. Use header buttons/swipes to navigate; terminal gestures stay
+inside the terminal. Manual pane IDs remain available under **Pane ID**.
+The terminal keeps
 the stream's dimensions and can be panned horizontally. Browser input is disabled.
 Frames are acknowledged only after xterm.js processes them; reconnecting creates
 a fresh attachment.

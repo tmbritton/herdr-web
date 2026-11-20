@@ -7,6 +7,7 @@ import gleam/result
 import gleam/uri
 import herdr_web/config.{type Config}
 import herdr_web/socket
+import herdr_web/subprocess
 import mist.{type ResponseData}
 
 // The handler does not depend on the request body until streaming is added.
@@ -19,6 +20,27 @@ pub fn handle(
   req: Request(mist.Connection),
 ) -> Response(ResponseData) {
   case req.method, request.path_segments(req) {
+    Get, ["api", "panes"] -> {
+      let host = request.get_header(req, "host") |> result.unwrap("")
+      let res = case config.allowed_host(cfg, host) {
+        False -> text(403, "Forbidden\n")
+        True ->
+          case
+            subprocess.run(
+              cfg.executable,
+              list.append(cfg.prefix, ["api", "snapshot"]),
+            )
+          {
+            Ok(body) ->
+              text(200, body)
+              |> response.set_header("content-type", "application/json")
+            Error(_) -> text(503, "Herdr discovery unavailable\n")
+          }
+      }
+      res
+      |> response.set_header("connection", "close")
+      |> response.set_header("cache-control", "no-store")
+    }
     Get, ["ws", encoded] -> {
       let pane = uri.percent_decode(encoded) |> result.unwrap("")
       let origins =

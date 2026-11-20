@@ -144,8 +144,6 @@ try {
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(base);
-  await page.locator("#pane").fill(pane);
-  await page.getByRole("button", { name: "Watch", exact: true }).click();
   await page.locator("#status").filter({ hasText: "read-only" }).waitFor();
   assert(await page.locator(".xterm-screen").isVisible());
   await page
@@ -157,6 +155,59 @@ try {
     .locator(".xterm-accessibility-tree")
     .filter({ hasText: "WATCH_STREAM_NEXT" })
     .waitFor({ state: "attached" });
+  const second = cli(
+    "tab",
+    "create",
+    "--workspace",
+    created.result.workspace.workspace_id,
+    "--cwd",
+    process.cwd(),
+    "--label",
+    "Second",
+    "--no-focus",
+  ).result.root_pane.pane_id;
+  await page.getByRole("button", { name: "Refresh panes" }).click();
+  await until(
+    async () => (await page.locator("#picker option").count()) === 2,
+    "pane discovery",
+  );
+  assert.equal(await page.locator("#picker").inputValue(), pane);
+  await page.getByRole("button", { name: "Next pane", exact: true }).click();
+  await until(
+    async () => (await page.locator("#picker").inputValue()) === second,
+    "next pane",
+  );
+  await page
+    .locator("#terminal")
+    .dispatchEvent("pointerdown", { pointerId: 1, clientX: 200, clientY: 20 });
+  await page
+    .locator("#terminal")
+    .dispatchEvent("pointerup", { pointerId: 1, clientX: 20, clientY: 20 });
+  assert.equal(await page.locator("#picker").inputValue(), second);
+  await page
+    .getByRole("button", { name: "Previous pane", exact: true })
+    .click();
+  assert.equal(await page.locator("#picker").inputValue(), pane);
+  await page.getByRole("button", { name: "Next pane", exact: true }).click();
+  const label = await page.locator("#position").boundingBox();
+  await page.mouse.move(label.x + 10, label.y + label.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(label.x + 90, label.y + label.height / 2);
+  await page.mouse.up();
+  assert.equal(await page.locator("#picker").inputValue(), pane);
+  await page.getByRole("button", { name: "Next pane", exact: true }).click();
+  cli("pane", "close", second);
+  await page.getByRole("button", { name: "Refresh panes" }).click();
+  await until(
+    async () => (await page.locator("#picker").inputValue()) === pane,
+    "closed-pane fallback",
+  );
+  assert.equal(await page.locator(".xterm").count(), 1);
+  assert.equal(
+    cli("api", "snapshot").result.snapshot.focused_pane_id,
+    before.focused_pane_id,
+  );
+  await page.locator("summary").click();
   await page.locator("#pane").fill("w1:p999999");
   await page.getByRole("button", { name: "Watch", exact: true }).click();
   await until(

@@ -13,16 +13,27 @@
   <body>
     <header>
       <h1>Herdr Web</h1>
-      <form id="attach">
-        <label
-          >Pane
-          <input
-            id="pane"
-            placeholder="w1:p1"
-            required
-            pattern="w[1-9][0-9]*:p[1-9][0-9]*" /></label
-        ><button>Watch</button>
-      </form>
+      <nav id="pane-nav" aria-label="Pane navigation">
+        <button id="previous" aria-label="Previous pane" disabled>←</button>
+        <label id="position" for="picker">Loading panes…</label>
+        <button id="next" aria-label="Next pane" disabled>→</button>
+      </nav>
+      <select id="picker" aria-label="Choose pane"></select>
+      <button id="refresh">Refresh panes</button>
+      <details>
+        <summary>Pane ID</summary>
+        <form id="attach">
+          <label
+            >Pane
+            <input
+              id="pane"
+              placeholder="w1:p1"
+              required
+              pattern="w[1-9][0-9]*:p[1-9][0-9]*" /></label
+          ><button>Watch</button>
+        </form>
+      </details>
+      <span id="discovery" role="status"></span>
       <span id="status" role="status">Choose a pane to watch</span>
     </header>
     <main id="viewport"><div id="terminal"></div></main>
