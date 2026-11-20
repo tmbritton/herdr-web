@@ -1,16 +1,18 @@
 # Herdr Web Terminal Bridge
 
-A mobile-friendly browser bridge to persistent Herdr terminal panes, built around Gleam on the BEAM, Mist, xterm.js, and private access through Tailscale Serve.
+A mobile-friendly browser bridge to persistent Herdr terminal panes, built around
+Gleam on the BEAM, Mist, Effect, xterm.js, and private access through Tailscale Serve.
 
-**Status:** Live watch streaming with pane discovery and navigation. Open
-`http://127.0.0.1:3000` to browse existing Herdr tabs and panes. Interactive control
-is the next milestone. `/healthz` checks bridge liveness.
+**Status:** Live streaming, pane navigation and explicit control. Open
+`http://127.0.0.1:3000` to browse existing Herdr tabs and panes. Every attachment
+starts in watch mode. Phone controls and stale-connection handling are the next
+milestones. `/healthz` checks bridge liveness.
 
 ## Tooling and deployment choice
 
 Use **mise for development** and a **systemd user service for deployment**.
 
-- `mise.toml` pins Gleam, Erlang/OTP, and Rebar3 and provides project tasks.
+- `mise.toml` pins Gleam, Erlang/OTP, Rebar3 and Node and provides project tasks.
 - `gleam.toml` declares dependencies; `manifest.toml` locks their resolved versions
   and belongs in version control.
 - `gleam export erlang-shipment` builds a production bundle of BEAM bytecode.
@@ -45,7 +47,7 @@ mise run format   # Format source and tests
 mise run check    # Formatting and type checks
 mise run lint     # Gleam compiler warnings treated as errors
 mise run build    # Compile development code
-mise run test     # Real HTTP integration test on an OS-assigned loopback port
+mise run test     # Gleam/HTTP tests and Effect-aware frontend unit tests
 mise run export   # Production bundle in build/erlang-shipment/
 ```
 
@@ -59,10 +61,24 @@ row-major layout order. Selection follows pane identity through rearrangements;
 when a pane closes, the next pane at its previous position (or the last remaining
 pane) is selected. Use header buttons/swipes to navigate; terminal gestures stay
 inside the terminal. Manual pane IDs remain available under **Pane ID**.
-The terminal keeps
-the stream's dimensions and can be panned horizontally. Browser input is disabled.
+In watch mode, the terminal keeps the stream's dimensions and can be panned
+horizontally. Browser input is disabled.
 Frames are acknowledged only after xterm.js processes them; reconnecting creates
 a fresh attachment.
+
+### Control and recovery
+
+Choose **Take control** before typing. If another controller is active, **Take
+over** explicitly replaces it. **Release** returns to watch mode. **Fit terminal**
+uses the available container and follows subsequent layout changes while
+controlling; watch mode never sends resize commands. Leaving the pane or hiding
+the page closes the attachment. Returning/reconnecting obtains a fresh view in
+watch mode. Input is never automatically replayed.
+
+Browser buffering is bounded, and the CLI transport has a 1 MiB cumulative input
+budget per attachment because Herdr does not acknowledge stdin consumption.
+Exhausting that budget releases control; take control again to continue. Actual
+desktop-TUI handoff and Pixel Fold transitions still need hands-on validation.
 
 Configuration is read at startup:
 
@@ -81,9 +97,17 @@ restart the bridge. WebSocket requests require both an allowed Origin and Host.
 Gleam's standard formatter is `gleam format`; its compiler provides type and lint
 diagnostics. `mise run check` checks formatting, runs `gleam check`, builds with
 `--warnings-as-errors`, and compiles Erlang interoperability modules with
-`erlc -Werror`. Browser code uses TypeScript, ESLint and Prettier, plus Node's test
-runner. The installed pre-commit hook runs `check` and `test`; reinstall it
+`erlc -Werror`. Browser code uses strict TypeScript, type-aware ESLint, Prettier,
+and Effect's compiler diagnostics (`@effect/tsgo`). Runtime tests use
+`@effect/vitest`, including virtual clocks, property tests and cancellation tests.
+The installed pre-commit hook runs `check` and `test`; reinstall it
 with `mise run hooks:install` after cloning or changing the hook.
+
+The frontend is built on **Effect 4.1.4**: schemas and branded identifiers at data
+boundaries, tagged protocol states and control capabilities, typed errors,
+replaceable Context/Layer services, scoped sockets and event subscriptions, and
+bounded queues. See [`docs/EFFECT_FRONTEND.md`](docs/EFFECT_FRONTEND.md) for the
+design, source findings, and guarantees enforced by the tests and compiler.
 
 The supervised subprocess adapter uses `erlexec`. Building its port executable
 requires GNU Make and a C++17 compiler; deployed snapshots include that executable
@@ -158,10 +182,12 @@ For private phone access, use Tailscale Serve as described in [PLAN.md](PLAN.md)
 
 ```text
 src/herdr_web.gleam       Server startup, loopback binding, and process lifetime
-src/herdr_web/web.gleam   HTTP routes and placeholder landing page
-test/                    Gleeunit runner and HTTP integration test
+src/herdr_web/web.gleam   HTTP routes, discovery, assets and WebSocket routing
+src/herdr_web/socket.gleam Attachment/control protocol and worker lifecycle
+frontend/                Effect application, schemas, services, xterm.js UI/tests
+test/                    Gleeunit runner, protocol and process/HTTP tests
 deploy/                  systemd user-service definition
-scripts/                 Local deployment installer
+scripts/                 Build, deployment, hooks and real browser integration
 gleam.toml               Gleam package and dependencies
 manifest.toml            Generated dependency lockfile
 mise.toml                Pinned tools and development/deployment tasks

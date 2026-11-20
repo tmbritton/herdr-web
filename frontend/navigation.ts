@@ -1,67 +1,44 @@
-export interface Pane {
-  id: string;
-  terminalId: string;
-  label: string;
-  group: string;
-  tabId: string;
-}
-function object(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    throw new Error("Invalid discovery response");
-  return value as Record<string, unknown>;
-}
-function array(value: unknown): Record<string, unknown>[] {
-  if (!Array.isArray(value)) throw new Error("Invalid discovery list");
-  return value.map(object);
-}
-const text = (value: unknown, fallback: string) =>
-  typeof value === "string" && value ? value : fallback;
-const order = (value: unknown) =>
-  typeof value === "number" && Number.isFinite(value)
-    ? value
-    : Number.MAX_SAFE_INTEGER;
-export function panesFromSnapshot(value: unknown): Pane[] {
-  const snapshot = object(object(object(value).result).snapshot);
-  const workspaces = new Map(
-    array(snapshot.workspaces).map((w) => [w.workspace_id, w]),
+import { Effect, Option, Schema } from "effect";
+import { ProtocolError, Snapshot } from "./domain.ts";
+import type { Pane, Selection } from "./domain.ts";
+export type { Pane } from "./domain.ts";
+
+export function normalize(snapshot: Snapshot): readonly Pane[] {
+  const source = snapshot.result.snapshot;
+  const workspaces = new Map(source.workspaces.map((w) => [w.workspace_id, w]));
+  const tabs = new Map(source.tabs.map((t) => [t.tab_id, t]));
+  const positions = new Map(
+    source.layouts.flatMap((layout) =>
+      layout.panes.map((p) => [p.pane_id, p.rect] as const),
+    ),
   );
-  const tabs = new Map(array(snapshot.tabs).map((t) => [t.tab_id, t]));
-  const positions = new Map<string, Record<string, unknown>>();
-  for (const layout of array(snapshot.layouts)) {
-    for (const pane of array(layout.panes))
-      positions.set(String(pane.pane_id), object(pane.rect));
-  }
-  const seen = new Set<string>();
-  return array(snapshot.panes)
+  return source.panes
     .map((p) => {
-      const id = String(p.pane_id);
-      if (!/^w[1-9]\d*:p[1-9]\d*$/.test(id) || seen.has(id))
-        throw new Error("Invalid pane identity");
-      seen.add(id);
-      const workspace = workspaces.get(p.workspace_id) ?? {};
-      const tab = tabs.get(p.tab_id) ?? {};
-      const rect = positions.get(id) ?? {};
+      const workspace = workspaces.get(p.workspace_id);
+      const tab = tabs.get(p.tab_id);
+      const rect = positions.get(p.pane_id);
       return {
-        id,
-        terminalId: text(p.terminal_id, id),
-        label: text(p.label, text(p.title, id)),
-        tabId: String(p.tab_id),
-        group: `${text(workspace.label, String(p.workspace_id))} / ${text(tab.label, String(p.tab_id))}`,
+        id: p.pane_id,
+        terminalId: p.terminal_id,
+        tabId: p.tab_id,
+        label: p.label || p.title || p.pane_id,
+        group: `${workspace?.label ?? p.workspace_id} / ${tab?.label ?? p.tab_id}`,
         rank: [
-          order(workspace.number),
-          order(tab.number),
-          order(rect.y),
-          order(rect.x),
-        ],
+          workspace?.number ?? Number.MAX_SAFE_INTEGER,
+          tab?.number ?? Number.MAX_SAFE_INTEGER,
+          rect?.y ?? Number.MAX_SAFE_INTEGER,
+          rect?.x ?? Number.MAX_SAFE_INTEGER,
+        ] as const,
       };
     })
-    .sort((a, b) => {
-      for (let index = 0; index < a.rank.length; index++) {
-        const diff = a.rank[index]! - b.rank[index]!;
-        if (diff) return diff;
-      }
-      return a.id.localeCompare(b.id, "en", { numeric: true });
-    })
+    .sort(
+      (a, b) =>
+        a.rank[0] - b.rank[0] ||
+        a.rank[1] - b.rank[1] ||
+        a.rank[2] - b.rank[2] ||
+        a.rank[3] - b.rank[3] ||
+        a.id.localeCompare(b.id, "en", { numeric: true }),
+    )
     .map(({ id, terminalId, label, group, tabId }) => ({
       id,
       terminalId,
@@ -70,20 +47,41 @@ export function panesFromSnapshot(value: unknown): Pane[] {
       tabId,
     }));
 }
+
+const decodeSnapshot = Schema.decodeUnknownEffect(Snapshot);
+export const panesFromSnapshot = Effect.fn("panesFromSnapshot")(
+  (value: unknown) =>
+    decodeSnapshot(value).pipe(
+      Effect.map(normalize),
+      Effect.mapError(
+        () => new ProtocolError({ message: "Invalid pane discovery response" }),
+      ),
+    ),
+);
+
 export function selectPane(
-  old: Pane[],
-  next: Pane[],
-  selected: string | undefined,
-  rememberedTerminal?: string,
-): string | undefined {
-  if (next.some((p) => p.id === selected)) return selected;
+  old: readonly Pane[],
+  next: readonly Pane[],
+  selected: Option.Option<Selection>,
+): Option.Option<Pane> {
+  const previous = Option.getOrUndefined(selected);
+  const exact = next.find((p) => p.id === previous?.paneId);
+  if (exact !== undefined) return Option.some(exact);
   const terminal =
-    old.find((p) => p.id === selected)?.terminalId ?? rememberedTerminal;
-  const moved = next.find((p) => terminal && p.terminalId === terminal);
-  if (moved) return moved.id;
+    old.find((p) => p.id === previous?.paneId)?.terminalId ??
+    previous?.terminalId;
+  const moved = next.find(
+    (p) => terminal !== undefined && p.terminalId === terminal,
+  );
+  if (moved !== undefined) return Option.some(moved);
   const index = Math.max(
     0,
-    old.findIndex((p) => p.id === selected),
+    old.findIndex((p) => p.id === previous?.paneId),
   );
-  return next[Math.min(index, next.length - 1)]?.id;
+  return Option.fromUndefinedOr(next[Math.min(index, next.length - 1)]);
 }
+
+export const selectionOf = (pane: Pane): Selection => ({
+  paneId: pane.id,
+  terminalId: pane.terminalId,
+});

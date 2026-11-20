@@ -5,12 +5,15 @@
 The bridge provides a Gleam/Mist HTTP server bound to `127.0.0.1:3000`, live
 watch-mode terminal streaming into xterm.js, exact WebSocket-origin validation,
 bounded subprocess buffering, pane discovery/navigation and a `/healthz` liveness
-endpoint. Explicit control remains to be implemented. `TASKS.md` tracks progress.
+endpoint. Explicit acquisition, takeover, input, resize and release are implemented.
+`TASKS.md` tracks the remaining lifecycle and phone-workflow work.
 
 The integration spike verified the installed Herdr 0.8.2 against disposable
 workloads; findings are in `docs/HERDR_PROTOCOL.md`. `erlexec` manages OS subprocess
 lifetimes through a small Erlang OTP worker, with typed Gleam protocol handling.
-Browser assets are built with esbuild, TypeScript and xterm.js.
+Browser assets are built with esbuild, TypeScript, Effect 4.1.4 and xterm.js.
+The frontend uses schema-validated boundaries, nominal identities, typed errors,
+control capabilities and scoped services/fibers. See `docs/EFFECT_FRONTEND.md`.
 
 Development uses mise-pinned Gleam, Erlang/OTP, and Rebar3. Production deployment
 uses `gleam export erlang-shipment` and a systemd **user** service. The installer

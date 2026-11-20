@@ -5,10 +5,66 @@
     "moduleResolution": "Bundler",
     "strict": true,
     "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "verbatimModuleSyntax": true,
     "allowImportingTsExtensions": true,
     "noEmit": true,
     "lib": ["ES2023", "DOM"],
-    "types": ["node"]
+    "types": ["node"],
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "diagnostics": true,
+        "includeSuggestionsInTsc": false,
+        "ignoreEffectWarningsInTscExitCode": false,
+        "ignoreEffectErrorsInTscExitCode": false,
+        "allowedUnstableApis": [
+          "@effect/platform-browser",
+          "@effect/vitest",
+          "effect/http",
+          "effect/socket",
+          "effect/persistence",
+          "effect/testing"
+        ],
+        "diagnosticSeverity": {
+          "floatingEffect": "error",
+          "missingEffectContext": "error",
+          "missingEffectError": "error",
+          "missingLayerContext": "error",
+          "anyUnknownInErrorContext": "error",
+          "unsafeEffectTypeAssertion": "error",
+          "missingStarInYieldEffectGen": "error",
+          "missingReturnYieldStar": "error",
+          "promiseInEffectSuccess": "error",
+          "effectInVoidSuccess": "error",
+          "returnEffectInGen": "error",
+          "effectInFailure": "error",
+          "outdatedApi": "error",
+          "duplicatePackage": "error",
+          "effectTryWithoutCatch": "error",
+          "globalErrorInEffectFailure": "error",
+          "globalErrorInEffectCatch": "error",
+          "unknownInEffectCatch": "error",
+          "tryCatchInEffectGen": "error",
+          "runEffectInsideEffect": "error",
+          "layerMergeAllWithDependencies": "error",
+          "lazyPromiseInEffectSync": "error",
+          "globalJson": "error",
+          "globalJsonInEffect": "error",
+          "globalFetch": "error",
+          "globalFetchInEffect": "error",
+          "globalTimers": "error",
+          "globalTimersInEffect": "error",
+          "asyncFunction": "error",
+          "newPromise": "error"
+        }
+      }
+    ]
   },
-  "include": ["frontend/**/*.ts"]
+  "include": ["frontend/**/*.ts", "vitest.config.ts"]
 }

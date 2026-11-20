@@ -76,6 +76,35 @@ function connect(pane, origin = base) {
     },
   };
 }
+async function frame(client, desiredMode) {
+  for (let attempt = 0; attempt < 40; attempt++) {
+    const message = await client.next();
+    assert.equal(message.binary, false);
+    const meta = JSON.parse(message.data.toString());
+    if (meta.type === "mode") {
+      client.mode = meta.mode;
+      client.generation = meta.generation;
+      if (meta.reason) client.reason = meta.reason;
+      continue;
+    }
+    assert.equal(meta.type, "frame", JSON.stringify(meta));
+    const output = await client.next();
+    assert.equal(output.binary, true);
+    client.ws.send(
+      JSON.stringify({
+        type: "ack",
+        generation: meta.generation,
+        seq: meta.seq,
+      }),
+    );
+    if (!desiredMode || client.mode === desiredMode)
+      return { meta, output: output.data };
+  }
+  throw new Error(`Expected mode ${desiredMode}`);
+}
+function command(client, data) {
+  client.ws.send(JSON.stringify({ ...data, generation: client.generation }));
+}
 try {
   await until(() => cli("pane", "list").result, "Herdr startup");
   const created = cli(
@@ -116,6 +145,8 @@ try {
   for (let attachment = 0; attachment < 2; attachment++) {
     const client = connect(pane);
     await once(client.ws, "open");
+    const mode = JSON.parse((await client.next()).data.toString());
+    assert.equal(mode.mode, "watch");
     const meta = JSON.parse((await client.next()).data.toString());
     assert.equal(meta.type, "frame");
     assert.equal(meta.full, true);
@@ -124,11 +155,23 @@ try {
     assert.equal(output.binary, true);
     assert.match(output.data.toString(), /WATCH_STREAM_MARKER/);
     if (attachment === 0) {
-      client.ws.send(JSON.stringify({ type: "input", text: "not allowed" }));
+      client.ws.send(
+        JSON.stringify({
+          type: "input",
+          generation: meta.generation,
+          text: "not allowed",
+        }),
+      );
       const error = JSON.parse((await client.next()).data.toString());
       assert.equal(error.type, "error");
     } else {
-      client.ws.send(JSON.stringify({ type: "ack", seq: meta.seq }));
+      client.ws.send(
+        JSON.stringify({
+          type: "ack",
+          generation: meta.generation,
+          seq: meta.seq,
+        }),
+      );
     }
     client.ws.close();
     await until(
@@ -136,6 +179,56 @@ try {
       "socket close",
     );
   }
+  const a = connect(pane),
+    b = connect(pane);
+  await Promise.all([once(a.ws, "open"), once(b.ws, "open")]);
+  await frame(a, "watch");
+  await frame(b, "watch");
+  command(a, { type: "control", takeover: false });
+  await frame(a, "control");
+  command(a, { type: "input", text: "printf 'CONTROL_%s\\n' DELIVERED\r" });
+  for (let n = 0; n < 40; n++) {
+    const output = await frame(a);
+    if (output.output.includes(Buffer.from("CONTROL_DELIVERED"))) break;
+    assert(n < 39, "terminal input was not executed");
+  }
+  command(a, { type: "resize", cols: 80, rows: 24 });
+  for (let n = 0; n < 40; n++) {
+    const resized = await frame(a);
+    if (resized.meta.cols === 80 && resized.meta.rows === 24) break;
+    assert(n < 39, "resize did not reach controller");
+  }
+  command(b, { type: "control", takeover: false });
+  await frame(b, "watch");
+  // Drain to the fresh watch attachment following the rejected control request.
+  while (b.reason !== "control_busy") await frame(b, "watch");
+  command(b, { type: "control", takeover: true });
+  await frame(b, "control");
+  await frame(a, "watch");
+  command(b, { type: "release" });
+  await frame(b, "watch");
+  command(a, { type: "control", takeover: false });
+  await frame(a, "control");
+  a.ws.terminate();
+  await until(
+    () =>
+      !execFileSync("ps", ["-eo", "args"], { encoding: "utf8" })
+        .split("\n")
+        .some(
+          (line) =>
+            line.includes(session) && line.includes("terminal session control"),
+        ),
+    "controller cleanup",
+  );
+  command(b, { type: "control", takeover: false });
+  await frame(b, "control");
+  command(b, { type: "release" });
+  await frame(b, "watch");
+  b.ws.close();
+  await until(
+    () => b.ws.readyState === WebSocket.CLOSED,
+    "controller socket close",
+  );
   const after = cli("api", "snapshot").result.snapshot;
   assert.equal(after.focused_pane_id, before.focused_pane_id);
   assert.deepEqual(after.layouts, before.layouts);
@@ -155,6 +248,28 @@ try {
     .locator(".xterm-accessibility-tree")
     .filter({ hasText: "WATCH_STREAM_NEXT" })
     .waitFor({ state: "attached" });
+  await page.getByRole("button", { name: "Take control", exact: true }).click();
+  await page
+    .locator("#mode-status")
+    .filter({ hasText: "You control this pane" })
+    .waitFor();
+  await page.locator(".xterm-helper-textarea").focus();
+  await page.keyboard.type("printf 'BROWSER_%s\\n' CONTROL_OK");
+  await page.keyboard.press("Enter");
+  await page
+    .locator(".xterm-accessibility-tree")
+    .filter({ hasText: "BROWSER_CONTROL_OK" })
+    .waitFor({ state: "attached" });
+  await page.getByRole("button", { name: "Fit terminal", exact: true }).click();
+  await until(
+    () =>
+      page.evaluate(
+        () =>
+          document.querySelector(".xterm-screen").getBoundingClientRect()
+            .width <= document.querySelector("#viewport").clientWidth,
+      ),
+    "explicit control fit",
+  );
   const second = cli(
     "tab",
     "create",
@@ -177,6 +292,17 @@ try {
     async () => (await page.locator("#picker").inputValue()) === second,
     "next pane",
   );
+  await page.locator("#status").filter({ hasText: "read-only" }).waitFor();
+  await until(
+    () =>
+      !execFileSync("ps", ["-eo", "args"], { encoding: "utf8" })
+        .split("\n")
+        .some(
+          (line) =>
+            line.includes(session) && line.includes("terminal session control"),
+        ),
+    "control release on pane switch",
+  );
   await page
     .locator("#terminal")
     .dispatchEvent("pointerdown", { pointerId: 1, clientX: 200, clientY: 20 });
@@ -187,15 +313,29 @@ try {
   await page
     .getByRole("button", { name: "Previous pane", exact: true })
     .click();
-  assert.equal(await page.locator("#picker").inputValue(), pane);
+  await until(
+    async () => (await page.locator("#picker").inputValue()) === pane,
+    "previous pane",
+  );
   await page.getByRole("button", { name: "Next pane", exact: true }).click();
+  await until(
+    async () => (await page.locator("#picker").inputValue()) === second,
+    "next pane before swipe",
+  );
   const label = await page.locator("#position").boundingBox();
   await page.mouse.move(label.x + 10, label.y + label.height / 2);
   await page.mouse.down();
   await page.mouse.move(label.x + 90, label.y + label.height / 2);
   await page.mouse.up();
-  assert.equal(await page.locator("#picker").inputValue(), pane);
+  await until(
+    async () => (await page.locator("#picker").inputValue()) === pane,
+    "header swipe",
+  );
   await page.getByRole("button", { name: "Next pane", exact: true }).click();
+  await until(
+    async () => (await page.locator("#picker").inputValue()) === second,
+    "next pane before closure",
+  );
   cli("pane", "close", second);
   await page.getByRole("button", { name: "Refresh panes" }).click();
   await until(
@@ -207,18 +347,42 @@ try {
     cli("api", "snapshot").result.snapshot.focused_pane_id,
     before.focused_pane_id,
   );
+  cli("pane", "run", pane, "printf 'PANE_FALLBACK_MARKER\\n'");
+  await page
+    .locator(".xterm-accessibility-tree")
+    .filter({ hasText: "PANE_FALLBACK_MARKER" })
+    .waitFor({ state: "attached" });
   await page.locator("summary").click();
   await page.locator("#pane").fill("w1:p999999");
   await page.getByRole("button", { name: "Watch", exact: true }).click();
   await until(
     async () =>
       !(await page.locator(".xterm-accessibility-tree").innerText()).includes(
-        "WATCH_STREAM_MARKER",
+        "PANE_FALLBACK_MARKER",
       ),
     "previous pane output cleared on failed switch",
   );
   assert.deepEqual(errors, []);
   await page.close();
+  const blockedStorage = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+  });
+  blockedStorage.on("pageerror", (error) => errors.push(error.message));
+  await blockedStorage.addInitScript(() => {
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new DOMException("Blocked", "SecurityError");
+      },
+    });
+  });
+  await blockedStorage.goto(base);
+  await blockedStorage
+    .locator(".xterm-accessibility-tree")
+    .filter({ hasText: "PANE_FALLBACK_MARKER" })
+    .waitFor({ state: "attached" });
+  assert.deepEqual(errors, []);
+  await blockedStorage.close();
   await until(() => {
     const processes = execFileSync("ps", ["-eo", "args"], { encoding: "utf8" });
     return !processes
@@ -229,7 +393,7 @@ try {
       );
   }, "observer cleanup");
   console.log(
-    "PASS: real Herdr frames, fresh attachment, origin rejection, watch-only input, desktop non-interference, browser rendering, observer cleanup",
+    "PASS: real Herdr streaming, acquire/conflict/takeover/release, input/resize, scoped browser rendering/navigation, desktop non-interference and process cleanup",
   );
 } finally {
   for (const socket of sockets) socket.terminate();

@@ -7,10 +7,11 @@ persistent Herdr terminal panes. The main use case is checking on coding agents
 from a phone and occasionally interacting with their live terminal UI. It is also
 a practical project for learning Gleam and OTP.
 
-The bridge serves a watch-only xterm.js terminal and `/healthz` on
+The bridge serves an xterm.js terminal and `/healthz` on
 `127.0.0.1:3000`. Supervised Herdr streams, exact WebSocket origins and bounded
-output, pane discovery and header navigation are implemented; explicit control
-is next. `/healthz` only
+output, pane discovery, header navigation and explicit control are implemented.
+The frontend uses Effect 4.1.4. Lifecycle deadlines and phone controls are next.
+`/healthz` only
 checks bridge liveness. See `TASKS.md` for progress and `docs/HERDR_PROTOCOL.md`
 for verified 0.8.2 behavior.
 
@@ -27,7 +28,7 @@ for verified 0.8.2 behavior.
 - `src/herdr_web/web.gleam`: HTTP handler, browser assets and WebSocket routing.
 - `src/herdr_web/socket.gleam`: attachment lifecycle and browser protocol.
 - `src/herdr_web_process*.erl`: bounded subprocess transport and OTP supervision.
-- `frontend/`: TypeScript/xterm.js UI, styles and Node unit tests.
+- `frontend/`: Effect/TypeScript schemas, services, state machine, xterm.js UI and tests.
 - `test/herdr_web_test.gleam`: Gleeunit runner and real HTTP integration test.
 - `deploy/herdr-web.service`: systemd user-service definition.
 - `scripts/install-service.sh`: production snapshot and service installation.
@@ -56,9 +57,26 @@ The pre-commit hook runs `mise run check` and `mise run test`. Never bypass it.
 `erlexec` also requires Make and a C++17 compiler at build time. See README for
 the local Bazzite/OpenSSL runtime-library override.
 The asset task bundles `frontend/` into `priv/static/` with esbuild. Node/npm are
-build-time dependencies. `check` also runs TypeScript, ESLint and Prettier; `test`
-runs Gleam and browser unit tests. `mise exec -- npm run test:integration` uses
+build-time dependencies. `check` also runs Effect's TypeScript compiler diagnostics,
+type-aware ESLint and Prettier; `test` runs Gleam and Effect/Vitest tests (two workers).
+`mise exec -- npm run test:integration` uses
 a disposable named Herdr session plus Chromium (install it with Playwright).
+
+### Frontend correctness
+
+Use **Effect 4**, following `docs/EFFECT_FRONTEND.md` and the pinned package's
+`ai-docs/` and source. Do not mix v3 APIs into this application.
+
+- Schema-decode external data and infer types from schemas. Preserve branded
+  identities, bounded dimensions and distinct watch/control capabilities.
+- Keep expected errors typed; use Context services and Layers for browser IO.
+- Own sockets, listeners, polling and pending work through scopes and fibers.
+  A reconnect creates a new attachment; never retry or replay terminal input.
+- Preserve the protocol state machine's full-snapshot, generation, sequence and
+  rendered-before-ack rules. No unchecked JSON casts or non-null assertions.
+- Keep strict TypeScript, type-aware ESLint, Effect diagnostics and compile-time
+  negative assertions in the pre-commit gate. Use Effect/Vitest and TestClock
+  for cancellation, lifecycle and timeout tests.
 
 ### Service deployment
 

@@ -16,7 +16,11 @@ design source of truth.
 - [x] **3. Discovery/navigation:** Read-only pane/tab discovery, stable IDs and
   ordering, picker and header previous/next/swipes, one visible live attachment.
   Test changes in topology, fallback, and independent desktop focus.
-- [ ] **4. Control:** Explicit acquire/takeover/release, input and resize
+- [x] **3a. Effect frontend:** Runtime schemas and branded domain types, typed
+  state/capability transitions, scoped browser services, bounded event streams,
+  Effect-aware tests and compiler diagnostics. See `docs/EFFECT_FRONTEND.md`.
+  This user-requested foundation takes priority over completing control.
+- [x] **4. Control:** Explicit acquire/takeover/release, input and resize
   validation, ownership display and release on switch/disconnect. Test conflicts,
   input delivery, geometry and return to watch mode against isolated Herdr.
 - [ ] **5. Lifecycle:** Bound in-flight output, acknowledge rendered frames,
@@ -52,3 +56,12 @@ require a later hands-on check; report them separately from browser simulation.
   failed before implementation. Real browser checks cover automatic selection,
   additions, previous/next, header swipes, terminal gesture isolation, closure
   fallback, one retained terminal instance and unchanged desktop focus.
+- Effect migration and control implementation passed independent review. Red tests
+  covered malformed boundaries, explicit-control state transitions, scoped socket
+  cleanup, bounded writes, renderer cancellation, callback overflow, page hiding
+  and migration of stored selection. Real Herdr/Chromium tests exercise input,
+  conflict/takeover, release, fit and release-on-navigation.
+- Review found bounded-queue self-publication could deadlock the dispatcher, and
+  a blocked storage getter could fail Layer construction. Both had failing
+  regressions before fixes; the re-review approved the changes. Full checks,
+  18 Gleam tests, 25 Effect tests and real Herdr/Chromium integration passed.
