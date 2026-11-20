@@ -1,5 +1,7 @@
 -module(herdr_web_runtime).
--export([env/1, asset/1]).
+-export([env/1, asset/1, monotonic_milliseconds/0]).
+
+monotonic_milliseconds() -> erlang:monotonic_time(millisecond).
 
 env(Name) ->
     case os:getenv(binary_to_list(Name)) of

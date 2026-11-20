@@ -6,7 +6,8 @@ The bridge provides a Gleam/Mist HTTP server bound to `127.0.0.1:3000`, live
 watch-mode terminal streaming into xterm.js, exact WebSocket-origin validation,
 bounded subprocess buffering, pane discovery/navigation and a `/healthz` liveness
 endpoint. Explicit acquisition, takeover, input, resize and release are implemented.
-`TASKS.md` tracks the remaining lifecycle and phone-workflow work.
+Initial-frame, rendered-frame and heartbeat deadlines bound attachment lifetimes;
+recovery always returns to watch mode. `TASKS.md` tracks remaining phone work.
 
 The integration spike verified the installed Herdr 0.8.2 against disposable
 workloads; findings are in `docs/HERDR_PROTOCOL.md`. `erlexec` manages OS subprocess

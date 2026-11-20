@@ -1,4 +1,5 @@
 pub type Command {
+  Ping(generation: Int)
   Ack(generation: Int, seq: Int)
   Control(generation: Int, takeover: Bool)
   Release(generation: Int)
@@ -11,6 +12,7 @@ pub fn decode(text: String) -> Result(Command, String) {
     use kind <- d.field("type", d.string)
     use generation <- d.field("generation", d.int)
     case kind {
+      "ping" -> d.success(Ping(generation))
       "ack" -> {
         use seq <- d.field("seq", d.int)
         d.success(Ack(generation, seq))
@@ -60,7 +62,12 @@ pub fn decode(text: String) -> Result(Command, String) {
 
 pub fn generation(cmd: Command) -> Int {
   case cmd {
-    Ack(g, _) | Control(g, _) | Release(g) | Input(g, _) | Resize(g, _, _) -> g
+    Ping(g)
+    | Ack(g, _)
+    | Control(g, _)
+    | Release(g)
+    | Input(g, _)
+    | Resize(g, _, _) -> g
   }
 }
 

@@ -79,11 +79,17 @@ export const ErrorRecord = Schema.Struct({
   type: Schema.Literal("error"),
   reason: Schema.String.check(Schema.isMaxLength(4096)),
 });
-export const ServerRecord = Schema.Union([Frame, ModeRecord, ErrorRecord]);
+export const ServerRecord = Schema.Union([
+  Frame,
+  ModeRecord,
+  ErrorRecord,
+  Schema.Struct({ type: Schema.Literal("pong") }),
+]);
 export type ServerRecord = typeof ServerRecord.Type;
 export const ServerJson = Schema.fromJsonString(ServerRecord);
 
 export const ClientCommand = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("ping"), generation: Generation }),
   Schema.Struct({
     type: Schema.Literal("ack"),
     generation: Generation,

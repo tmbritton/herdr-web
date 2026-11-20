@@ -1,5 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Queue, Schema, Stream } from "effect";
+import { TestClock } from "effect/testing";
 import { AttachmentId, PaneId } from "./domain.ts";
 import type { ClientCommand } from "./domain.ts";
 import { makeAttachment } from "./session.ts";
@@ -62,6 +63,26 @@ const setup = Effect.gen(function* () {
   return { attachment, rendering, rendered, acked, sent, closed: () => closed };
 });
 describe("attachment scope and render acknowledgement", () => {
+  it.effect(
+    "a silent bridge times out and finalizes the connection without replaying input",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* setup;
+        yield* Deferred.succeed(test.rendered, undefined);
+        const fiber = yield* test.attachment.run.pipe(
+          Effect.result,
+          Effect.forkChild,
+        );
+        yield* Deferred.await(test.acked);
+        yield* TestClock.adjust("21 seconds");
+        assert.equal((yield* Fiber.join(fiber))._tag, "Failure");
+        assert.isTrue(test.closed());
+        assert.isFalse(test.sent.some((command) => command.type === "input"));
+        const sent = test.sent.length;
+        yield* TestClock.adjust("30 seconds");
+        assert.equal(test.sent.length, sent);
+      }),
+  );
   it.effect("waits for terminal parsing before acknowledging", () =>
     Effect.gen(function* () {
       const test = yield* setup;

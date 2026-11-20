@@ -2,6 +2,8 @@ import gleeunit/should
 import herdr_web/command
 
 pub fn explicit_control_and_epoch_test() {
+  command.decode("{\"type\":\"ping\",\"generation\":2}")
+  |> should.equal(Ok(command.Ping(2)))
   command.decode("{\"type\":\"control\",\"generation\":2,\"takeover\":false}")
   |> should.equal(Ok(command.Control(2, False)))
   command.decode("{\"type\":\"input\",\"generation\":2,\"text\":\"hello\\n\"}")

@@ -155,6 +155,7 @@ export const consume = Effect.fnUntraced(function* (
   );
   if (record.type === "error")
     return yield* new ProtocolError({ message: record.reason });
+  if (record.type === "pong") return { _tag: "Updated", machine };
   if (machine._tag === "AwaitingBytes" || machine._tag === "Rendering")
     return yield* new ProtocolError({ message: "Interrupted terminal frame" });
   if (record.type === "mode") {

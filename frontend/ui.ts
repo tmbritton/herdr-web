@@ -91,6 +91,7 @@ export class BrowserUi extends Context.Service<
           position: element("#position", HTMLElement),
           nav: element("#pane-nav", HTMLElement),
           refresh: element("#refresh", HTMLButtonElement),
+          reconnect: element("#reconnect", HTMLButtonElement),
           control: element("#control", HTMLButtonElement),
           takeover: element("#takeover", HTMLButtonElement),
           release: element("#release", HTMLButtonElement),
@@ -234,6 +235,7 @@ export class BrowserUi extends Context.Service<
         );
         listen(dom.next, "click", () => emit({ _tag: "Navigate", delta: 1 }));
         listen(dom.refresh, "click", () => emit({ _tag: "Refresh" }));
+        listen(dom.reconnect, "click", () => emit({ _tag: "Reconnect" }));
         for (const [button, takeover] of [
           [dom.control, false],
           [dom.takeover, true],

@@ -4,11 +4,18 @@ pub type Config {
     prefix: List(String),
     origins: List(String),
     port: Int,
+    timeouts: lifecycle.Timeouts,
   )
 }
 
 pub fn default() -> Config {
-  Config("herdr", [], ["http://127.0.0.1:3000", "http://localhost:3000"], 3000)
+  Config(
+    "herdr",
+    [],
+    ["http://127.0.0.1:3000", "http://localhost:3000"],
+    3000,
+    lifecycle.defaults(),
+  )
 }
 
 pub fn load() -> Config {
@@ -29,6 +36,7 @@ pub fn load() -> Config {
     prefix,
     origins,
     port,
+    cfg.timeouts,
   )
 }
 
@@ -63,3 +71,4 @@ import gleam/int
 import gleam/list
 import gleam/result
 import gleam/string
+import herdr_web/lifecycle

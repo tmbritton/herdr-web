@@ -33,8 +33,8 @@ let bridge;
 let browser;
 let bridgeLog = "";
 const sockets = [];
-async function until(fn, description) {
-  for (let attempt = 0; attempt < 100; attempt++) {
+async function until(fn, description, attempts = 100) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
     try {
       if (await fn()) return;
     } catch {
@@ -76,11 +76,12 @@ function connect(pane, origin = base) {
     },
   };
 }
-async function frame(client, desiredMode) {
+async function frame(client, desiredMode, acknowledge = true) {
   for (let attempt = 0; attempt < 40; attempt++) {
     const message = await client.next();
     assert.equal(message.binary, false);
     const meta = JSON.parse(message.data.toString());
+    if (meta.type === "pong") continue;
     if (meta.type === "mode") {
       client.mode = meta.mode;
       client.generation = meta.generation;
@@ -90,15 +91,16 @@ async function frame(client, desiredMode) {
     assert.equal(meta.type, "frame", JSON.stringify(meta));
     const output = await client.next();
     assert.equal(output.binary, true);
-    client.ws.send(
-      JSON.stringify({
-        type: "ack",
-        generation: meta.generation,
-        seq: meta.seq,
-      }),
-    );
-    if (!desiredMode || client.mode === desiredMode)
-      return { meta, output: output.data };
+    const matches = !desiredMode || client.mode === desiredMode;
+    if (acknowledge || !matches)
+      client.ws.send(
+        JSON.stringify({
+          type: "ack",
+          generation: meta.generation,
+          seq: meta.seq,
+        }),
+      );
+    if (matches) return { meta, output: output.data };
   }
   throw new Error(`Expected mode ${desiredMode}`);
 }
@@ -229,6 +231,47 @@ try {
     () => b.ws.readyState === WebSocket.CLOSED,
     "controller socket close",
   );
+  const stalled = connect(pane);
+  await once(stalled.ws, "open");
+  await frame(stalled, "watch");
+  command(stalled, { type: "control", takeover: false });
+  await frame(stalled, "control", false);
+  let stalledReason;
+  stalled.ws.on("message", (bytes, binary) => {
+    if (!binary) {
+      const message = JSON.parse(bytes.toString());
+      if (message.type === "error") stalledReason = message.reason;
+    }
+  });
+  // A client can remain network-alive while its terminal renderer is frozen.
+  const keepAlive = setInterval(() => {
+    if (stalled.ws.readyState === WebSocket.OPEN)
+      command(stalled, { type: "ping" });
+  }, 2000);
+  try {
+    await until(
+      () => stalled.ws.readyState === WebSocket.CLOSED,
+      "stalled renderer deadline",
+      150,
+    );
+  } finally {
+    clearInterval(keepAlive);
+  }
+  assert.equal(stalledReason, "render_timeout");
+  await until(
+    () =>
+      !execFileSync("ps", ["-eo", "args"], { encoding: "utf8" })
+        .split("\n")
+        .some(
+          (line) =>
+            line.includes(session) && line.includes("terminal session control"),
+        ),
+    "stalled controller release",
+  );
+  const fresh = connect(pane);
+  await once(fresh.ws, "open");
+  assert.equal((await frame(fresh, "watch")).meta.full, true);
+  fresh.ws.close();
   const after = cli("api", "snapshot").result.snapshot;
   assert.equal(after.focused_pane_id, before.focused_pane_id);
   assert.deepEqual(after.layouts, before.layouts);

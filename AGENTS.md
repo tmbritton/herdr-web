@@ -10,7 +10,8 @@ a practical project for learning Gleam and OTP.
 The bridge serves an xterm.js terminal and `/healthz` on
 `127.0.0.1:3000`. Supervised Herdr streams, exact WebSocket origins and bounded
 output, pane discovery, header navigation and explicit control are implemented.
-The frontend uses Effect 4.1.4. Lifecycle deadlines and phone controls are next.
+The frontend uses Effect 4.1.4. Initial-frame, render-ack and heartbeat deadlines
+are implemented; phone controls are next.
 `/healthz` only
 checks bridge liveness. See `TASKS.md` for progress and `docs/HERDR_PROTOCOL.md`
 for verified 0.8.2 behavior.

@@ -5,8 +5,8 @@ Gleam on the BEAM, Mist, Effect, xterm.js, and private access through Tailscale 
 
 **Status:** Live streaming, pane navigation and explicit control. Open
 `http://127.0.0.1:3000` to browse existing Herdr tabs and panes. Every attachment
-starts in watch mode. Phone controls and stale-connection handling are the next
-milestones. `/healthz` checks bridge liveness.
+starts in watch mode. Lifecycle deadlines and fresh-view recovery are implemented;
+phone controls are next. `/healthz` checks bridge liveness.
 
 ## Tooling and deployment choice
 
@@ -74,6 +74,14 @@ uses the available container and follows subsequent layout changes while
 controlling; watch mode never sends resize commands. Leaving the pane or hiding
 the page closes the attachment. Returning/reconnecting obtains a fresh view in
 watch mode. Input is never automatically replayed.
+
+Attachments have an 8-second initial-frame deadline, a 10-second rendered-frame
+acknowledgement deadline and a 20-second client-idle deadline. The browser sends
+heartbeats every five seconds. Server deadlines use monotonic time and are checked
+once per second; TCP writes also have a two-second timeout. A live heartbeat does
+not extend a stalled renderer's deadline. The browser independently times out a
+silent bridge and reconnects in watch mode, including after page suspension.
+Use **Reconnect** for an immediate fresh attachment.
 
 Browser buffering is bounded, and the CLI transport has a 1 MiB cumulative input
 budget per attachment because Herdr does not acknowledge stdin consumption.

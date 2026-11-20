@@ -23,7 +23,7 @@ design source of truth.
 - [x] **4. Control:** Explicit acquire/takeover/release, input and resize
   validation, ownership display and release on switch/disconnect. Test conflicts,
   input delivery, geometry and return to watch mode against isolated Herdr.
-- [ ] **5. Lifecycle:** Bound in-flight output, acknowledge rendered frames,
+- [x] **5. Lifecycle:** Bound in-flight output, acknowledge rendered frames,
   heartbeat/stale-client cleanup, reconnect with a fresh view and no input replay.
   Test stalled consumers, CLI failure, closed panes and reconnects.
 - [ ] **6. Phone workflow:** Responsive viewport/keyboard handling, font controls,
@@ -65,3 +65,10 @@ require a later hands-on check; report them separately from browser simulation.
   a blocked storage getter could fail Layer construction. Both had failing
   regressions before fixes; the re-review approved the changes. Full checks,
   18 Gleam tests, 25 Effect tests and real Herdr/Chromium integration passed.
+- Lifecycle tests failed before implementation. Deadlines cover initial frames,
+  rendered acknowledgements and client idle time; real WebSocket unit tests use
+  isolated subprocess fixtures. Effect TestClock verifies heartbeat cancellation
+  and silent-bridge cleanup. Real Herdr integration withholds a controller's ACK
+  while continuing heartbeats, then checks release and fresh watch recovery.
+  Independent review approved the change; 24 Gleam and 27 Effect tests, compiler/
+  lint/format checks, and real Herdr/Chromium integration passed.

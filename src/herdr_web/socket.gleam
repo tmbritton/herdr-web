@@ -5,8 +5,11 @@ import gleam/json
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
+import glisten/socket/options
+import glisten/transport
 import herdr_web/command
 import herdr_web/config.{type Config}
+import herdr_web/lifecycle
 import herdr_web/protocol
 import herdr_web/subprocess as child
 import mist
@@ -18,6 +21,7 @@ type Mode {
 }
 
 type Message {
+  Tick
   Output(Int, child.Event)
   WorkerDown(process.Down)
 }
@@ -36,23 +40,49 @@ type State {
     cols: Int,
     rows: Int,
     requested_size: #(Int, Int),
+    started: Int,
+    last_client: Int,
+    waiting_since: Option(Int),
+    timer: process.Timer,
   )
 }
 
 pub fn upgrade(req: Request(mist.Connection), cfg: Config, pane: String) {
   mist.websocket(
     req,
-    on_init: fn(_) {
+    on_init: fn(connection) {
+      // A stalled TCP send must not indefinitely block deadline processing.
+      let assert Ok(_) =
+        transport.set_opts(connection.transport, connection.socket, [
+          options.SendTimeout(2000),
+          options.SendTimeoutClose(True),
+        ])
       let events = process.new_subject()
+      let now = lifecycle.now()
+      let timer = process.send_after(events, 1000, Tick)
       let selector =
         process.new_selector()
         |> process.select(events)
         |> process.select_monitors(WorkerDown)
       let state =
-        State(None, None, 0, False, events, 0, Watch, cfg, pane, 120, 40, #(
+        State(
+          None,
+          None,
           0,
+          False,
+          events,
           0,
-        ))
+          Watch,
+          cfg,
+          pane,
+          120,
+          40,
+          #(0, 0),
+          now,
+          now,
+          None,
+          timer,
+        )
       #(open(state, Watch, False), Some(selector))
     },
     on_close: close,
@@ -61,7 +91,7 @@ pub fn upgrade(req: Request(mist.Connection), cfg: Config, pane: String) {
 }
 
 fn open(state: State, mode: Mode, takeover: Bool) -> State {
-  close(state)
+  close_attachment(state)
   let generation = state.generation + 1
   let args = case mode {
     Watch -> ["terminal", "session", "observe", state.pane]
@@ -110,11 +140,30 @@ fn open(state: State, mode: Mode, takeover: Bool) -> State {
     generation: generation,
     mode: mode,
     requested_size: #(0, 0),
+    started: lifecycle.now(),
+    waiting_since: None,
   )
 }
 
 fn handle(state: State, message, connection) {
   case message {
+    mist.Custom(Tick) ->
+      case
+        lifecycle.expired(
+          lifecycle.now(),
+          state.started,
+          state.last_client,
+          state.seq > 0,
+          state.waiting_since,
+          state.cfg.timeouts,
+        )
+      {
+        Some(reason) -> fail(connection, reason)
+        None ->
+          mist.continue(
+            State(..state, timer: process.send_after(state.events, 1000, Tick)),
+          )
+      }
     mist.Custom(Output(generation, _)) if generation != state.generation ->
       mist.continue(state)
     mist.Custom(Output(_, child.Line(line))) ->
@@ -154,6 +203,7 @@ fn handle(state: State, message, connection) {
                       ..state,
                       seq: frame.seq,
                       waiting: True,
+                      waiting_since: Some(lifecycle.now()),
                       cols: frame.cols,
                       rows: frame.rows,
                     ),
@@ -199,7 +249,11 @@ fn handle(state: State, message, connection) {
           case command.generation(cmd) {
             generation if generation < state.generation -> mist.continue(state)
             generation if generation == state.generation ->
-              handle_command(state, cmd, connection)
+              handle_command(
+                State(..state, last_client: lifecycle.now()),
+                cmd,
+                connection,
+              )
             _ -> fail(connection, "invalid_generation")
           }
         }
@@ -212,9 +266,14 @@ fn handle(state: State, message, connection) {
 
 fn handle_command(state: State, cmd: command.Command, connection) {
   case cmd, state.worker {
+    command.Ping(_), _ ->
+      case mist.send_text_frame(connection, "{\"type\":\"pong\"}") {
+        Ok(_) -> mist.continue(state)
+        Error(_) -> mist.stop()
+      }
     command.Ack(_, seq), Some(worker) if seq == state.seq && state.waiting -> {
       child.demand(worker)
-      mist.continue(State(..state, waiting: False))
+      mist.continue(State(..state, waiting: False, waiting_since: None))
     }
     command.Control(_, takeover), _ if state.mode == Watch && state.seq > 0 ->
       change(state, RequestingControl, takeover, connection, "")
@@ -291,6 +350,11 @@ fn send_mode(connection, state: State, reason: String) {
 }
 
 fn close(state: State) {
+  let _ = process.cancel_timer(state.timer)
+  close_attachment(state)
+}
+
+fn close_attachment(state: State) {
   case state.monitor {
     Some(monitor) -> process.demonitor_process(monitor)
     None -> Nil

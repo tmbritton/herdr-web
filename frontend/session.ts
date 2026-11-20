@@ -12,6 +12,7 @@ import type { Intent } from "./machine.ts";
 import { BrowserUi } from "./ui.ts";
 import { BridgeTransport } from "./transport.ts";
 import type { Connection } from "./transport.ts";
+import { heartbeat } from "./liveness.ts";
 
 export interface Attachment {
   readonly view: Effect.Effect<View>;
@@ -61,7 +62,15 @@ export const makeAttachment = Effect.fn("makeAttachment")(function* (
         yield* Ref.set(connection, Option.some(socket));
         yield* Effect.addFinalizer(() => Ref.set(connection, Option.none()));
         const consumeBatch = Effect.gen(function* () {
-          const packets = yield* socket.read;
+          const packets = yield* socket.read.pipe(
+            Effect.timeoutOrElse({
+              duration: "20 seconds",
+              orElse: () =>
+                Effect.fail(
+                  new ProtocolError({ message: "Bridge heartbeat timed out" }),
+                ),
+            }),
+          );
           for (const packet of packets) {
             const update = yield* Effect.gen(function* () {
               const before = yield* Ref.get(state);
@@ -94,8 +103,18 @@ export const makeAttachment = Effect.fn("makeAttachment")(function* (
             yield* socket.send(done.ack);
           }
         });
+        const generation = Ref.get(state).pipe(
+          Effect.map((machine) =>
+            machine._tag === "AwaitingMode"
+              ? Option.none()
+              : Option.some(machine.mode.generation),
+          ),
+        );
         return yield* Effect.raceFirst(
-          Effect.forever(consumeBatch),
+          Effect.all(
+            [Effect.forever(consumeBatch), heartbeat(generation, socket.send)],
+            { concurrency: "unbounded", discard: true },
+          ),
           Deferred.await(failedWrite),
         );
       }),
