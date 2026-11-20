@@ -6,6 +6,8 @@ import type {
   PaneId,
   Sequence,
   WatchLease,
+  AttachmentId,
+  SubmissionId,
 } from "./domain.ts";
 
 // Compile-time regression assertions. These functions are never run.
@@ -24,4 +26,10 @@ export function identities(unchecked: string, sequence: Sequence) {
   // @ts-expect-error Frame sequence and attachment generation are distinct.
   const generation: Generation = sequence;
   return { pane, generation };
+}
+
+export function submissionIdentity(attachment: AttachmentId) {
+  // @ts-expect-error A completion token cannot be an attachment identifier.
+  const submission: SubmissionId = attachment;
+  return submission;
 }

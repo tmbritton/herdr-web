@@ -12,38 +12,129 @@
   </head>
   <body>
     <header>
-      <h1>Herdr Web</h1>
+      <div class="topline">
+        <h1>Herdr <span>Web</span></h1>
+        <span id="status" role="status">Connecting…</span>
+        <details id="options">
+          <summary>Options</summary>
+          <div class="options-panel">
+            <label for="font-size"
+              >Text size
+              <output id="font-value" for="font-size">14</output></label
+            >
+            <input
+              id="font-size"
+              type="range"
+              min="10"
+              max="24"
+              step="1"
+              value="14"
+            />
+            <div class="actions">
+              <button id="refresh">Refresh panes</button
+              ><button id="reconnect">Reconnect</button>
+            </div>
+            <form id="attach">
+              <label for="pane">Pane ID</label>
+              <div class="actions">
+                <input
+                  id="pane"
+                  placeholder="w1:p1"
+                  required
+                  pattern="w[1-9][0-9]*:p[1-9][0-9]*"
+                /><button>Watch</button>
+              </div>
+            </form>
+          </div>
+        </details>
+      </div>
       <nav id="pane-nav" aria-label="Pane navigation">
         <button id="previous" aria-label="Previous pane" disabled>←</button>
-        <label id="position" for="picker">Loading panes…</label>
+        <button
+          id="position"
+          aria-label="Open pane picker"
+          aria-haspopup="dialog"
+        >
+          Loading panes…
+        </button>
         <button id="next" aria-label="Next pane" disabled>→</button>
       </nav>
-      <select id="picker" aria-label="Choose pane"></select>
-      <button id="refresh">Refresh panes</button>
-      <button id="reconnect">Reconnect</button>
-      <details>
-        <summary>Pane ID</summary>
-        <form id="attach">
-          <label
-            >Pane
-            <input
-              id="pane"
-              placeholder="w1:p1"
-              required
-              pattern="w[1-9][0-9]*:p[1-9][0-9]*" /></label
-          ><button>Watch</button>
-        </form>
-      </details>
       <span id="discovery" role="status"></span>
-      <span id="status" role="status">Choose a pane to watch</span>
+    </header>
+    <main id="viewport" aria-label="Terminal view">
+      <div id="terminal"></div>
+    </main>
+    <footer>
       <div id="ownership">
         <span id="mode-status">Watch mode</span>
-        <button id="control" disabled>Take control</button>
-        <button id="takeover" hidden>Take over</button>
-        <button id="release" disabled>Release</button>
-        <button id="fit" disabled>Fit terminal</button>
+        <div class="actions">
+          <button id="control" disabled>Take control</button>
+          <button id="takeover" hidden>Take over</button>
+          <button id="release" hidden disabled>Release</button>
+          <button id="fit" hidden disabled>Fit terminal</button>
+          <button id="keyboard" hidden disabled>Keyboard</button>
+        </div>
       </div>
-    </header>
-    <main id="viewport"><div id="terminal"></div></main>
+      <details id="composer">
+        <summary>Write a prompt</summary>
+        <form id="compose">
+          <label class="sr-only" for="prompt">Prompt</label>
+          <textarea
+            id="prompt"
+            maxlength="16384"
+            rows="3"
+            placeholder="Write or dictate a prompt…"
+            spellcheck="true"
+            enterkeyhint="enter"
+          ></textarea>
+          <div class="compose-actions">
+            <label
+              >Paste style
+              <select id="paste-style">
+                <option value="bracketed">Bracketed</option>
+                <option value="plain">Plain text</option>
+              </select></label
+            >
+            <button id="paste" type="button" disabled>Paste</button>
+            <button id="submit-prompt" type="submit" disabled>
+              Paste + Enter
+            </button>
+            <button id="clear-prompt" type="button">Clear draft</button>
+          </div>
+          <span id="composer-status" role="status"
+            >Drafts stay in this page and are kept per terminal.</span
+          >
+        </form>
+      </details>
+      <div id="keys" role="toolbar" aria-label="Terminal keys">
+        <button data-key="Escape" disabled>Esc</button
+        ><button data-key="Tab" disabled>Tab</button>
+        <button data-key="ArrowLeft" aria-label="Left arrow" disabled>←</button
+        ><button data-key="ArrowDown" aria-label="Down arrow" disabled>
+          ↓
+        </button>
+        <button data-key="ArrowUp" aria-label="Up arrow" disabled>↑</button
+        ><button data-key="ArrowRight" aria-label="Right arrow" disabled>
+          →
+        </button>
+        <button
+          id="ctrl"
+          aria-pressed="false"
+          title="Ctrl for the next terminal key"
+          disabled
+        >
+          Ctrl
+        </button>
+        <button data-key="ControlC" disabled>Ctrl+C</button
+        ><button data-key="Enter" disabled>Enter</button>
+      </div>
+    </footer>
+    <dialog id="pane-dialog" aria-labelledby="picker-title">
+      <div class="dialog-heading">
+        <h2 id="picker-title">Choose a pane</h2>
+        <button id="close-picker" aria-label="Close pane picker">×</button>
+      </div>
+      <select id="picker" aria-label="Choose pane" size="10"></select>
+    </dialog>
   </body>
 </html>

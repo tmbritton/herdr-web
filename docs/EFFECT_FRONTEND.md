@@ -26,6 +26,9 @@ examples use different Schema, service, stream and error-handling APIs.
 - A queue consumer must not await publication into its own bounded queue.
   Commands update the model directly; reader notifications wake the dispatcher,
   which projects the latest model rather than replaying obsolete UI states.
+- Prompt submissions run as scoped fibers, allowing release/navigation to cancel
+  a delayed Enter. Branded submission IDs prevent an older completion from
+  modifying a newer pending draft. Drafts stay page-local and are never replayed.
 - Enable strict TypeScript and type-aware ESLint plus Effect's compiler
   diagnostics. Tests include schema boundaries, state/capability transitions,
   cancellation, cleanup, backpressure and deterministic virtual-time cases.

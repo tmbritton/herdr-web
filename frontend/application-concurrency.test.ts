@@ -53,6 +53,9 @@ it.effect("drains saturated input queues and still handles page hiding", () =>
       notice: () => Effect.void,
       showPanes: () => Effect.void,
       dimensions: Effect.succeedNone,
+      setFont: () => Effect.void,
+      composerActive: () => Effect.succeed(true),
+      finishComposer: () => Effect.void,
       showView: (_pane, view) =>
         Effect.gen(function* () {
           if (view._tag === "Watching")

@@ -7,7 +7,9 @@ watch-mode terminal streaming into xterm.js, exact WebSocket-origin validation,
 bounded subprocess buffering, pane discovery/navigation and a `/healthz` liveness
 endpoint. Explicit acquisition, takeover, input, resize and release are implemented.
 Initial-frame, rendered-frame and heartbeat deadlines bound attachment lifetimes;
-recovery always returns to watch mode. `TASKS.md` tracks remaining phone work.
+recovery always returns to watch mode. Phone keys, a prompt composer, font sizing
+and visual-viewport handling are implemented. `TASKS.md` tracks deployment and
+remaining physical-device acceptance checks.
 
 The integration spike verified the installed Herdr 0.8.2 against disposable
 workloads; findings are in `docs/HERDR_PROTOCOL.md`. `erlexec` manages OS subprocess
@@ -133,6 +135,14 @@ Herdr supports multiple read-only observers and one terminal-stream controller a
 - Adjustable terminal font size.
 - Clear watch/control status and a release-control action.
 - Controls that remain reachable above the software keyboard.
+
+**Verified protocol constraint and composer decision:** Herdr 0.8.2 forwards
+controller input as raw bytes and does not expose bracketed-paste state in the
+rendered ANSI stream. The composer therefore offers an explicit bracketed/plain
+paste choice, defaults to bracketed paste, and sends through the controller
+stream. It keeps drafts until the user clears them and revalidates ownership
+before a delayed Enter. This avoids assuming paste mode or using a separate pane
+API that bypasses stream ownership. See `docs/HERDR_PROTOCOL.md`.
 
 ## Tailscale deployment
 

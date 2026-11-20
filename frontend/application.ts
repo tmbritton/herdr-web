@@ -1,5 +1,6 @@
 import {
   Effect,
+  Exit,
   Fiber,
   Option,
   Queue,
@@ -8,13 +9,14 @@ import {
   Schema,
   Stream,
 } from "effect";
-import { AttachmentId, InputText, PaneId, UiError } from "./domain.ts";
+import { AttachmentId, FontSize, PaneId, UiError } from "./domain.ts";
 import type {
   ControlLease,
   Dimensions,
   Pane,
   Selection,
   Snapshot,
+  SubmissionId,
 } from "./domain.ts";
 import { normalize, selectPane, selectionOf } from "./navigation.ts";
 import { PreferenceStore } from "./preferences.ts";
@@ -24,6 +26,7 @@ import { BridgeTransport } from "./transport.ts";
 import { BrowserUi } from "./ui.ts";
 import type { UiEvent } from "./ui.ts";
 import type { Intent } from "./machine.ts";
+import { deliverPrompt, keyInput, terminalInput } from "./phone.ts";
 
 type AppEvent =
   | UiEvent
@@ -54,6 +57,11 @@ type Active = {
   readonly fiber: Fiber.Fiber<void>;
   readonly autoFit: Option.Option<ControlLease>;
   readonly size: Option.Option<Dimensions>;
+  readonly submission: Option.Option<{
+    readonly id: SubmissionId;
+    readonly lease: ControlLease;
+    readonly fiber: Fiber.Fiber<void>;
+  }>;
 };
 
 export const runApplication = Effect.scoped(
@@ -62,6 +70,13 @@ export const runApplication = Effect.scoped(
     const transport = yield* BridgeTransport;
     const preferences = yield* PreferenceStore;
     const saved = yield* preferences.load;
+    const settings = yield* Ref.make(saved);
+    const fontSize = yield* Schema.decodeUnknownEffect(FontSize)(
+      saved.fontSize ?? 14,
+    ).pipe(
+      Effect.mapError(() => new UiError({ message: "Invalid text size" })),
+    );
+    yield* ui.setFont(fontSize);
     const selection = yield* Ref.make<Option.Option<Selection>>(
       Option.fromUndefinedOr(saved.selection),
     );
@@ -83,9 +98,17 @@ export const runApplication = Effect.scoped(
     );
     yield* Queue.offer(events, { _tag: "Tick" });
 
+    const cancelSubmission = Effect.fnUntraced(function* (owner: Active) {
+      if (Option.isSome(owner.submission))
+        yield* Fiber.interrupt(owner.submission.value.fiber);
+      return { ...owner, submission: Option.none() };
+    });
     const stop = Effect.gen(function* () {
       const old = yield* Ref.getAndSet(active, Option.none());
-      if (Option.isSome(old)) yield* Fiber.interrupt(old.value.fiber);
+      if (Option.isSome(old)) {
+        yield* cancelSubmission(old.value);
+        yield* Fiber.interrupt(old.value.fiber);
+      }
     });
     const showNavigation = Effect.gen(function* () {
       const list = yield* Ref.get(panes);
@@ -99,11 +122,20 @@ export const runApplication = Effect.scoped(
       // Notifications only wake the dispatcher. Read the latest model so a
       // queued older status cannot overwrite a command's newer transition.
       const view = yield* current.attachment.view;
+      let owner = current;
+      if (
+        Option.isSome(owner.submission) &&
+        (view._tag !== "Controlling" ||
+          view.lease.generation !== owner.submission.value.lease.generation)
+      ) {
+        owner = yield* cancelSubmission(owner);
+        yield* Ref.set(active, Option.some(owner));
+      }
       if (view._tag !== "Controlling")
         yield* Ref.set(
           active,
           Option.some({
-            ...current,
+            ...owner,
             autoFit: Option.none(),
             size: Option.none(),
           }),
@@ -117,7 +149,11 @@ export const runApplication = Effect.scoped(
       const selected: Selection =
         found === undefined ? { paneId: pane } : selectionOf(found);
       yield* Ref.set(selection, Option.some(selected));
-      yield* preferences.save({ ...saved, selection: selected });
+      const nextSettings = yield* Ref.updateAndGet(settings, (value) => ({
+        ...value,
+        selection: selected,
+      }));
+      yield* preferences.save(nextSettings);
       yield* showNavigation;
       if (!(yield* Ref.get(visible))) return;
       const number = yield* Ref.updateAndGet(ids, (n) => n + 1);
@@ -150,6 +186,7 @@ export const runApplication = Effect.scoped(
           fiber,
           autoFit: Option.none(),
           size: Option.none(),
+          submission: Option.none(),
         }),
       );
     });
@@ -169,9 +206,18 @@ export const runApplication = Effect.scoped(
         );
         return;
       }
-      yield* current.value.attachment
+      let owner = current.value;
+      if (
+        (intent._tag === "Release" || intent._tag === "Input") &&
+        Option.isSome(owner.submission) &&
+        owner.submission.value.lease.generation === intent.lease.generation
+      ) {
+        owner = yield* cancelSubmission(owner);
+        yield* Ref.set(active, Option.some(owner));
+      }
+      yield* owner.attachment
         .send(intent)
-        .pipe(Effect.andThen(present(current.value)))
+        .pipe(Effect.andThen(present(owner)))
         .pipe(Effect.catch((error) => ui.notice(error.message)));
     });
     const resize = Effect.fn("Application.resize")(function* (
@@ -291,6 +337,7 @@ export const runApplication = Effect.scoped(
           const current = yield* Ref.get(active);
           if (Option.isNone(current) || current.value.id !== event.id) return;
           yield* Ref.set(active, Option.none());
+          yield* cancelSubmission(current.value);
           yield* ui.showView(current.value.pane, {
             _tag: "Disconnected",
             attachment: event.id,
@@ -303,15 +350,93 @@ export const runApplication = Effect.scoped(
           yield* send(event);
           return;
         case "Input": {
-          const text = yield* Schema.decodeUnknownEffect(InputText)(
+          const text = yield* terminalInput(event.text, event.ctrl ?? false);
+          yield* send({ _tag: "Input", lease: event.lease, text });
+          return;
+        }
+        case "Key": {
+          const text = yield* keyInput(event.key, event.ctrl);
+          yield* send({ _tag: "Input", lease: event.lease, text });
+          return;
+        }
+        case "Compose": {
+          const current = yield* Ref.get(active);
+          if (
+            Option.isNone(current) ||
+            current.value.id !== event.lease.attachment
+          ) {
+            yield* ui.finishComposer(
+              event.id,
+              "Attachment changed; draft kept",
+            );
+            return;
+          }
+          const owner = yield* cancelSubmission(current.value);
+          const valid = Effect.gen(function* () {
+            return (yield* ui.visible) && (yield* ui.composerActive(event.id));
+          });
+          const submission = yield* deliverPrompt(
             event.text,
+            event.style,
+            event.submit,
+            valid,
+            (text) =>
+              owner.attachment.send({
+                _tag: "Input",
+                lease: event.lease,
+                text,
+              }),
+          ).pipe(
+            Effect.andThen(
+              ui.finishComposer(
+                event.id,
+                "Sent to the control stream · draft kept until you clear it",
+              ),
+            ),
+            Effect.catch((error) =>
+              ui.finishComposer(event.id, `${error.message} · draft kept`),
+            ),
+            Effect.onExit((exit) =>
+              Exit.hasInterrupts(exit)
+                ? ui.finishComposer(
+                    event.id,
+                    "Submission cancelled · draft kept",
+                  )
+                : Effect.void,
+            ),
+            Effect.forkScoped,
+          );
+          yield* Ref.set(
+            active,
+            Option.some({
+              ...owner,
+              submission: Option.some({
+                id: event.id,
+                lease: event.lease,
+                fiber: submission,
+              }),
+            }),
+          );
+          return;
+        }
+        case "Font": {
+          const size = yield* Schema.decodeUnknownEffect(FontSize)(
+            event.value,
           ).pipe(
             Effect.mapError(
               () =>
-                new UiError({ message: "Input is too large; it was not sent" }),
+                new UiError({ message: "Text size must be between 10 and 24" }),
             ),
           );
-          yield* send({ _tag: "Input", lease: event.lease, text });
+          yield* ui.setFont(size);
+          const next = yield* Ref.updateAndGet(settings, (value) => ({
+            ...value,
+            fontSize: size,
+          }));
+          yield* preferences.save(next);
+          const current = yield* Ref.get(active);
+          if (Option.isSome(current) && Option.isSome(current.value.autoFit))
+            yield* resize(current.value.autoFit.value, false);
           return;
         }
         case "Fit":

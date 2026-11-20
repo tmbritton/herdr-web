@@ -22,7 +22,13 @@ session rather than the user's running panes. Source cross-check: upstream tag
 - Rendered ANSI does not necessarily reproduce the application's input modes.
   In particular, do not infer bracketed-paste state from the rendered frame.
   `pane run` uses Herdr's atomic text-and-Enter input encoder; `pane send-text`
-  sends raw text. Composer integration must account for this distinction.
+  sends raw text. The web composer uses an explicit bracketed/plain choice and
+  stays on the owned controller stream. It never uses the separate pane-input
+  API, which would bypass stream-controller ownership.
+- Source verification in `server/headless.rs::apply_terminal_attach_input` shows
+  that stream input is forwarded directly to the PTY. `protocol/render_ansi.rs`
+  paints cells/cursor state without forwarding bracketed-paste mode. Composer
+  drafts are retained, and an optional delayed Enter rechecks ownership/visibility.
 - `herdr api snapshot` returns coherent workspace, tab, pane and layout metadata
   in one read-only request, including stable IDs and desktop focus. It is preferable
   to joining several independent list calls for navigation.

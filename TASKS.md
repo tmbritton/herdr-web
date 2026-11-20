@@ -26,9 +26,11 @@ design source of truth.
 - [x] **5. Lifecycle:** Bound in-flight output, acknowledge rendered frames,
   heartbeat/stale-client cleanup, reconnect with a fresh view and no input replay.
   Test stalled consumers, CLI failure, closed panes and reconnects.
-- [ ] **6. Phone workflow:** Responsive viewport/keyboard handling, font controls,
+- [x] **6. Phone workflow:** Responsive viewport/keyboard handling, font controls,
   touch keys and multiline paste-aware composer. Browser tests at narrow, wide,
-  short and tall sizes; finish deployment and private-access documentation.
+  short and tall sizes, then review/commit/push.
+- [ ] **7. Deployment:** Install and validate the final systemd snapshot; configure
+  private access without disturbing existing Serve routes; document device checks.
 
 ## Validation boundaries
 
@@ -72,3 +74,14 @@ require a later hands-on check; report them separately from browser simulation.
   while continuing heartbeats, then checks release and fresh watch recovery.
   Independent review approved the change; 24 Gleam and 27 Effect tests, compiler/
   lint/format checks, and real Herdr/Chromium integration passed.
+- Phone key/paste encoding and delayed-Enter cancellation had failing tests before
+  implementation. The composer uses an explicit paste style because 0.8.2 does
+  not export that mode. Browser checks cover touch keys, multiline paste, drafts,
+  font persistence, picker/header gestures, short layouts and stable connections
+  across viewport changes. Physical-device/OpenCode acceptance remains manual.
+- Phone review found the delayed Enter blocked release/navigation in the dispatcher.
+  A failing application-level test reproduced paste → Enter → release. Scoped,
+  request-identified submission fibers now cancel on release, input, navigation,
+  hide, reconnect and ownership loss. Four lifecycle regressions pass. The Ctrl+C
+  browser assertion now requires executed output, not echoed input. Re-review
+  approved; checks, 24 Gleam tests, 34 Effect tests and browser integration passed.

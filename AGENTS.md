@@ -11,7 +11,8 @@ The bridge serves an xterm.js terminal and `/healthz` on
 `127.0.0.1:3000`. Supervised Herdr streams, exact WebSocket origins and bounded
 output, pane discovery, header navigation and explicit control are implemented.
 The frontend uses Effect 4.1.4. Initial-frame, render-ack and heartbeat deadlines
-are implemented; phone controls are next.
+are implemented, along with phone keys, prompt composition, font sizing and
+visual-viewport handling. See `TASKS.md` for remaining deployment/device checks.
 `/healthz` only
 checks bridge liveness. See `TASKS.md` for progress and `docs/HERDR_PROTOCOL.md`
 for verified 0.8.2 behavior.
@@ -78,6 +79,9 @@ Use **Effect 4**, following `docs/EFFECT_FRONTEND.md` and the pinned package's
 - Keep strict TypeScript, type-aware ESLint, Effect diagnostics and compile-time
   negative assertions in the pre-commit gate. Use Effect/Vitest and TestClock
   for cancellation, lifecycle and timeout tests.
+- Keep composer delivery on the controller stream. Herdr 0.8.2 does not report
+  paste mode: preserve the explicit bracketed/plain choice, per-terminal page-local
+  drafts, and ownership/visibility recheck before Enter. Never auto-resubmit.
 
 ### Service deployment
 

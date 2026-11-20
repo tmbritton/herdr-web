@@ -5,8 +5,8 @@ Gleam on the BEAM, Mist, Effect, xterm.js, and private access through Tailscale 
 
 **Status:** Live streaming, pane navigation and explicit control. Open
 `http://127.0.0.1:3000` to browse existing Herdr tabs and panes. Every attachment
-starts in watch mode. Lifecycle deadlines and fresh-view recovery are implemented;
-phone controls are next. `/healthz` checks bridge liveness.
+starts in watch mode. Lifecycle recovery, touch keys, font sizing and a multiline
+prompt composer are implemented. `/healthz` checks bridge liveness.
 
 ## Tooling and deployment choice
 
@@ -60,7 +60,8 @@ The pane picker refreshes every five seconds, groups by workspace/tab, and uses
 row-major layout order. Selection follows pane identity through rearrangements;
 when a pane closes, the next pane at its previous position (or the last remaining
 pane) is selected. Use header buttons/swipes to navigate; terminal gestures stay
-inside the terminal. Manual pane IDs remain available under **Pane ID**.
+inside the terminal. Tap the pane title to open the picker. **Options** contains
+font sizing, refresh/reconnect actions and manual pane IDs.
 In watch mode, the terminal keeps the stream's dimensions and can be panned
 horizontally. Browser input is disabled.
 Frames are acknowledged only after xterm.js processes them; reconnecting creates
@@ -87,6 +88,32 @@ Browser buffering is bounded, and the CLI transport has a 1 MiB cumulative input
 budget per attachment because Herdr does not acknowledge stdin consumption.
 Exhausting that budget releases control; take control again to continue. Actual
 desktop-TUI handoff and Pixel Fold transitions still need hands-on validation.
+
+### Phone workflow
+
+- **Keyboard** focuses the live terminal input. The bottom toolbar provides
+  `Esc`, `Tab`, arrows, `Ctrl`, `Ctrl+C` and `Enter`. Ctrl is a one-shot modifier
+  for the next terminal key; input remains disabled in watch mode.
+- **Write a prompt** opens a multiline editor for typing, pasting or dictation.
+  **Paste** inserts text without Enter. **Paste + Enter** waits briefly after
+  pasting and rechecks the attachment before sending Enter.
+- Select **Bracketed** for applications expecting bracketed paste (the default
+  for the OpenCode/TUI workflow), or **Plain text** for applications that do not.
+  Herdr 0.8.2's rendered stream does not expose the application's paste mode, so
+  the choice is explicit. Clipboard pastes into the terminal follow this choice.
+  All input stays on the owned controller stream.
+- Drafts are kept per terminal in this page, including after successful sends;
+  use **Clear draft** when finished. Herdr does not acknowledge application input,
+  so uncertain sends are never automatically retried. Drafts do not survive a
+  full page reload. Pane selection and text size do persist when storage permits.
+- The layout follows the visual viewport when the keyboard opens. Folding,
+  rotation and resizing preserve the selected pane, terminal instance and socket
+  while the page remains active. Touch keys stay at the bottom of the visible UI.
+
+Automated browser checks cover narrow, wide, short and tall viewports, touch keys,
+multiline paste, reload, and per-terminal drafts. Physical Pixel 9 Fold keyboard,
+dictation, folding/split-screen and lock/unlock checks remain a manual acceptance
+pass, together with a real OpenCode prompt/response and desktop-TUI handoff.
 
 Configuration is read at startup:
 

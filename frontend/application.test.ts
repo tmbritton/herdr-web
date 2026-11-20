@@ -81,6 +81,9 @@ it.effect(
             trace.push(message);
           }),
         dimensions: Effect.succeedNone,
+        setFont: () => Effect.void,
+        composerActive: () => Effect.succeed(true),
+        finishComposer: () => Effect.void,
       });
       const fiber = yield* runApplication.pipe(
         Effect.provideService(BrowserUi, ui),

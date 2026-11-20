@@ -28,6 +28,9 @@ const setup = Effect.gen(function* () {
     showPanes: () => Effect.void,
     notice: () => Effect.void,
     dimensions: Effect.succeedNone,
+    setFont: () => Effect.void,
+    composerActive: () => Effect.succeed(true),
+    finishComposer: () => Effect.void,
   });
   const transport = BridgeTransport.of({
     discover: Effect.never,

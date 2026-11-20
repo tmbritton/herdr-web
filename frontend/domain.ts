@@ -22,6 +22,8 @@ export const TerminalId = Schema.NonEmptyString.check(
 export type TerminalId = typeof TerminalId.Type;
 export const AttachmentId = PositiveInt.pipe(Schema.brand("AttachmentId"));
 export type AttachmentId = typeof AttachmentId.Type;
+export const SubmissionId = PositiveInt.pipe(Schema.brand("SubmissionId"));
+export type SubmissionId = typeof SubmissionId.Type;
 export const Generation = PositiveInt.pipe(Schema.brand("Generation"));
 export type Generation = typeof Generation.Type;
 export const Sequence = PositiveInt.pipe(Schema.brand("Sequence"));
@@ -46,6 +48,7 @@ export type Dimensions = typeof Dimensions.Type;
 export const FontSize = Schema.Int.check(
   Schema.isBetween({ minimum: 10, maximum: 24 }),
 ).pipe(Schema.brand("FontSize"));
+export type FontSize = typeof FontSize.Type;
 const encoder = new TextEncoder();
 export const InputText = Schema.String.check(
   Schema.isPattern(/^[^\p{Surrogate}]*$/u),

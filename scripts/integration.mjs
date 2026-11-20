@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { createServer } from "node:net";
 import { once } from "node:events";
+import { mkdir } from "node:fs/promises";
 import { setTimeout as sleep } from "node:timers/promises";
 import WebSocket from "ws";
 import { chromium } from "@playwright/test";
@@ -19,6 +20,22 @@ const cli = (...args) => {
   });
   return output.trim() ? JSON.parse(output) : {};
 };
+const readPane = (pane) =>
+  execFileSync(
+    "herdr",
+    [
+      "--session",
+      session,
+      "pane",
+      "read",
+      pane,
+      "--source",
+      "recent-unwrapped",
+      "--lines",
+      "80",
+    ],
+    { env, encoding: "utf8", timeout: 15000 },
+  );
 const listener = createServer();
 listener.listen(0, "127.0.0.1");
 await once(listener, "listening");
@@ -107,6 +124,18 @@ async function frame(client, desiredMode, acknowledge = true) {
 function command(client, data) {
   client.ws.send(JSON.stringify({ ...data, generation: client.generation }));
 }
+async function options(page, open) {
+  const currentlyOpen =
+    (await page.locator("#options").getAttribute("open")) !== null;
+  if (currentlyOpen !== open) await page.locator("#options > summary").click();
+}
+async function refreshPanes(page) {
+  await options(page, true);
+  await page
+    .getByRole("button", { name: "Refresh panes", exact: true })
+    .click();
+  await options(page, false);
+}
 try {
   await until(() => cli("pane", "list").result, "Herdr startup");
   const created = cli(
@@ -121,6 +150,14 @@ try {
   const pane = created.result.root_pane.pane_id;
   cli("pane", "run", pane, "printf 'WATCH_STREAM_MARKER\\n'");
   await sleep(200);
+  cli("pane", "run", pane, "printf 'GEOMETRY_BEFORE_%s\\n' \"$(stty size)\"");
+  await until(
+    () => /GEOMETRY_BEFORE_(\d+) (\d+)/.test(readPane(pane)),
+    "initial PTY geometry",
+  );
+  const geometryBefore = /GEOMETRY_BEFORE_(\d+) (\d+)/
+    .exec(readPane(pane))
+    .slice(1);
   const before = cli("api", "snapshot").result.snapshot;
   bridge = spawn("gleam", ["run"], {
     detached: true,
@@ -181,6 +218,15 @@ try {
       "socket close",
     );
   }
+  cli("pane", "run", pane, "printf 'GEOMETRY_AFTER_%s\\n' \"$(stty size)\"");
+  await until(
+    () => /GEOMETRY_AFTER_(\d+) (\d+)/.test(readPane(pane)),
+    "observer PTY geometry",
+  );
+  assert.deepEqual(
+    /GEOMETRY_AFTER_(\d+) (\d+)/.exec(readPane(pane)).slice(1),
+    geometryBefore,
+  );
   const a = connect(pane),
     b = connect(pane);
   await Promise.all([once(a.ws, "open"), once(b.ws, "open")]);
@@ -276,7 +322,15 @@ try {
   assert.equal(after.focused_pane_id, before.focused_pane_id);
   assert.deepEqual(after.layouts, before.layouts);
   browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const page = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+    isMobile: true,
+    hasTouch: true,
+  });
+  let connections = 0;
+  page.on("websocket", () => {
+    connections++;
+  });
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(base);
@@ -303,6 +357,88 @@ try {
     .locator(".xterm-accessibility-tree")
     .filter({ hasText: "BROWSER_CONTROL_OK" })
     .waitFor({ state: "attached" });
+  await page.keyboard.type("printf 'TOUCH_%s\\n' ENTER_OK");
+  await page.getByRole("button", { name: "Enter", exact: true }).tap();
+  await page
+    .locator(".xterm-accessibility-tree")
+    .filter({ hasText: "TOUCH_ENTER_OK" })
+    .waitFor({ state: "attached" });
+  await page.getByRole("button", { name: "Keyboard", exact: true }).click();
+  await page.keyboard.type("THIS_SHOULD_NOT_RUN");
+  await page.getByRole("button", { name: "Ctrl", exact: true }).tap();
+  await page.keyboard.type("u");
+  await page.keyboard.type("printf 'CTRL_%s\\n' LATCH_OK");
+  await page.getByRole("button", { name: "Enter", exact: true }).tap();
+  await page
+    .locator(".xterm-accessibility-tree")
+    .filter({ hasText: "CTRL_LATCH_OK" })
+    .waitFor({ state: "attached" });
+  cli("pane", "run", pane, "sleep 30");
+  await sleep(200);
+  await page.getByRole("button", { name: "Ctrl+C", exact: true }).tap();
+  await sleep(200);
+  cli("pane", "run", pane, "printf 'TOUCH_C_%s\\n' OK");
+  await page
+    .locator(".xterm-accessibility-tree")
+    .filter({ hasText: "TOUCH_C_OK" })
+    .waitFor({ state: "attached", timeout: 5000 });
+  await page.locator("#composer > summary").click();
+  const prompt =
+    "printf 'COMPOSER_%s\\n' FIRST\nprintf 'COMPOSER_%s\\n' SECOND";
+  await page.locator("#prompt").fill(prompt);
+  await page.getByRole("button", { name: "Paste", exact: true }).click();
+  await page
+    .locator("#composer-status")
+    .filter({ hasText: "Sent to the control stream" })
+    .waitFor();
+  assert(
+    !(await page.locator(".xterm-accessibility-tree").innerText()).includes(
+      "COMPOSER_FIRST",
+    ),
+  );
+  await page.getByRole("button", { name: "Enter", exact: true }).tap();
+  await page
+    .locator(".xterm-accessibility-tree")
+    .filter({ hasText: "COMPOSER_SECOND" })
+    .waitFor({ state: "attached" });
+  assert.equal(await page.locator("#prompt").inputValue(), prompt);
+  await page.locator("#prompt").fill("printf 'SUBMIT_%s\\n' OK");
+  await page
+    .getByRole("button", { name: "Paste + Enter", exact: true })
+    .click();
+  await page
+    .locator(".xterm-accessibility-tree")
+    .filter({ hasText: "SUBMIT_OK" })
+    .waitFor({ state: "attached" });
+  await page.locator("#paste-style").selectOption("plain");
+  await page.locator("#prompt").fill("printf 'PLAIN_%s\\n' OK");
+  await page
+    .getByRole("button", { name: "Paste + Enter", exact: true })
+    .click();
+  await page
+    .locator(".xterm-accessibility-tree")
+    .filter({ hasText: "PLAIN_OK" })
+    .waitFor({ state: "attached" });
+  await page.getByRole("button", { name: "Clear draft", exact: true }).click();
+  assert.equal(await page.locator("#prompt").inputValue(), "");
+  await page.locator("#prompt").fill("keep this draft for the first terminal");
+  await page.locator("#composer > summary").click();
+  await options(page, true);
+  await page.locator("#font-size").focus();
+  await page.keyboard.press("Home");
+  await until(
+    async () => (await page.locator("#font-value").textContent()) === "10",
+    "minimum font size",
+  );
+  for (let size = 11; size <= 18; size++) {
+    await page.keyboard.press("ArrowRight");
+    await until(
+      async () =>
+        (await page.locator("#font-value").textContent()) === String(size),
+      "font size",
+    );
+  }
+  await options(page, false);
   await page.getByRole("button", { name: "Fit terminal", exact: true }).click();
   await until(
     () =>
@@ -313,6 +449,91 @@ try {
       ),
     "explicit control fit",
   );
+  const beforeLayouts = connections;
+  for (const [width, height] of [
+    [884, 740],
+    [844, 390],
+    [640, 320],
+    [360, 1000],
+    [390, 844],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await until(
+      () =>
+        page.evaluate(
+          ({ width, height }) => {
+            const footer = document
+              .querySelector("footer")
+              .getBoundingClientRect();
+            const terminal = document
+              .querySelector("#viewport")
+              .getBoundingClientRect();
+            return (
+              footer.bottom <= height + 1 &&
+              footer.width <= width + 1 &&
+              terminal.height > 20
+            );
+          },
+          { width, height },
+        ),
+      "responsive viewport sizing",
+    );
+    assert.equal(await page.locator("#picker").inputValue(), pane);
+    assert.equal(await page.locator(".xterm").count(), 1);
+  }
+  assert.equal(connections, beforeLayouts);
+  await mkdir("test-results", { recursive: true });
+  await page.screenshot({ path: "test-results/phone.png" });
+  await page.setViewportSize({ width: 390, height: 320 });
+  await page.locator("#composer > summary").click();
+  await page.locator("#prompt").fill("printf 'SHORT_%s\\n' COMPOSER_OK");
+  await page
+    .getByRole("button", { name: "Paste + Enter", exact: true })
+    .click();
+  try {
+    await until(
+      () => readPane(pane).includes("SHORT_COMPOSER_OK"),
+      "short keyboard-height composer",
+    );
+  } catch (error) {
+    console.log(
+      "short composer",
+      await page.locator("#composer-status").textContent(),
+      await page.locator("#mode-status").textContent(),
+      readPane(pane),
+    );
+    await page.screenshot({ path: "test-results/short-composer-failure.png" });
+    throw error;
+  }
+  const enterKey = await page
+    .getByRole("button", { name: "Enter", exact: true })
+    .boundingBox();
+  assert(enterKey.y >= 0 && enterKey.y + enterKey.height <= 321);
+  await page.screenshot({ path: "test-results/short-composer.png" });
+  await page.locator("#prompt").fill("keep this draft for the first terminal");
+  await page.locator("#composer > summary").click();
+  await page.setViewportSize({ width: 390, height: 844 });
+  // Wait for the controlled PTY to finish the resize before testing a reload.
+  await until(
+    () =>
+      page
+        .locator(".xterm-screen")
+        .evaluate((element) => element.getBoundingClientRect().height > 200),
+    "restored terminal height",
+  );
+  await page.reload();
+  await page.locator("#status").filter({ hasText: "read-only" }).waitFor();
+  assert.equal(await page.locator("#picker").inputValue(), pane);
+  assert.equal(await page.locator("#font-value").textContent(), "18");
+  await page.locator("#composer > summary").click();
+  assert.equal(await page.locator("#prompt").inputValue(), "");
+  await page.locator("#prompt").fill("keep this draft for the first terminal");
+  await page.locator("#composer > summary").click();
+  await page.getByRole("button", { name: "Take control", exact: true }).click();
+  await page
+    .locator("#mode-status")
+    .filter({ hasText: "You control this pane" })
+    .waitFor();
   const second = cli(
     "tab",
     "create",
@@ -324,18 +545,26 @@ try {
     "Second",
     "--no-focus",
   ).result.root_pane.pane_id;
-  await page.getByRole("button", { name: "Refresh panes" }).click();
+  await refreshPanes(page);
   await until(
     async () => (await page.locator("#picker option").count()) === 2,
     "pane discovery",
   );
   assert.equal(await page.locator("#picker").inputValue(), pane);
-  await page.getByRole("button", { name: "Next pane", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Open pane picker", exact: true })
+    .click();
+  await page.locator("#pane-dialog").waitFor();
+  await page.locator("#picker").selectOption(second);
   await until(
     async () => (await page.locator("#picker").inputValue()) === second,
     "next pane",
   );
-  await page.locator("#status").filter({ hasText: "read-only" }).waitFor();
+  await page
+    .locator("#status")
+    .filter({ hasText: `Watching ${second}` })
+    .waitFor();
+  assert.equal(await page.locator("#prompt").inputValue(), "");
   await until(
     () =>
       !execFileSync("ps", ["-eo", "args"], { encoding: "utf8" })
@@ -360,6 +589,10 @@ try {
     async () => (await page.locator("#picker").inputValue()) === pane,
     "previous pane",
   );
+  assert.equal(
+    await page.locator("#prompt").inputValue(),
+    "keep this draft for the first terminal",
+  );
   await page.getByRole("button", { name: "Next pane", exact: true }).click();
   await until(
     async () => (await page.locator("#picker").inputValue()) === second,
@@ -380,7 +613,7 @@ try {
     "next pane before closure",
   );
   cli("pane", "close", second);
-  await page.getByRole("button", { name: "Refresh panes" }).click();
+  await refreshPanes(page);
   await until(
     async () => (await page.locator("#picker").inputValue()) === pane,
     "closed-pane fallback",
@@ -395,7 +628,7 @@ try {
     .locator(".xterm-accessibility-tree")
     .filter({ hasText: "PANE_FALLBACK_MARKER" })
     .waitFor({ state: "attached" });
-  await page.locator("summary").click();
+  await options(page, true);
   await page.locator("#pane").fill("w1:p999999");
   await page.getByRole("button", { name: "Watch", exact: true }).click();
   await until(
@@ -436,7 +669,7 @@ try {
       );
   }, "observer cleanup");
   console.log(
-    "PASS: real Herdr streaming, acquire/conflict/takeover/release, input/resize, scoped browser rendering/navigation, desktop non-interference and process cleanup",
+    "PASS: real Herdr streaming/control/lifecycle, phone keys and composer, font persistence, responsive layouts/reload, pane navigation, desktop non-interference and process cleanup",
   );
 } finally {
   for (const socket of sockets) socket.terminate();
