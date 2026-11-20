@@ -8,7 +8,15 @@ import type {
   WatchLease,
   AttachmentId,
   SubmissionId,
+  Scroll,
 } from "./domain.ts";
+import type { ScrollIntent } from "./machine.ts";
+
+export function scrollCapability(watch: WatchLease, scroll: Scroll) {
+  // @ts-expect-error Watching cannot construct a scrolling command.
+  const intent: ScrollIntent = { _tag: "Scroll", lease: watch, scroll };
+  return intent;
+}
 
 // Compile-time regression assertions. These functions are never run.
 export function capabilities(

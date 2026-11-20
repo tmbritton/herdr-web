@@ -189,6 +189,9 @@ details[open] > summary::before {
 #terminal {
   width: max-content;
 }
+body[data-control] #viewport {
+  touch-action: pan-x pinch-zoom;
+}
 footer {
   flex: none;
   padding: 0.4rem 0.6rem max(0.4rem, env(safe-area-inset-bottom));

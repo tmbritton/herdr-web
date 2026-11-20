@@ -208,7 +208,9 @@ export const runApplication = Effect.scoped(
       }
       let owner = current.value;
       if (
-        (intent._tag === "Release" || intent._tag === "Input") &&
+        (intent._tag === "Release" ||
+          intent._tag === "Input" ||
+          intent._tag === "Scroll") &&
         Option.isSome(owner.submission) &&
         owner.submission.value.lease.generation === intent.lease.generation
       ) {
@@ -347,6 +349,7 @@ export const runApplication = Effect.scoped(
         }
         case "Control":
         case "Release":
+        case "Scroll":
           yield* send(event);
           return;
         case "Input": {

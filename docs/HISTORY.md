@@ -5,7 +5,9 @@
 Herdr 0.8.2 streams rendered screen updates, not a transcript. Increasing xterm.js
 scrollback cannot retrieve conversation text that was never sent to the browser.
 The bridge's Top/Home, Bottom/End and Page Up/Down keys navigate the application
-while controlling it.
+while controlling it. Mouse wheel/trackpad and vertical one-finger gestures now
+use Herdr's application-aware scrolling in control mode as well. These gestures
+remain subject to the application's retained-history limit.
 
 A disposable OpenCode **1.19.5** session containing 240 messages demonstrated that
 Home and Ctrl+G stop at message 141. Source verification in

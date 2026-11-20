@@ -230,7 +230,7 @@ try {
   const [, response] = await once(rejected, "unexpected-response");
   assert.equal(response.statusCode, 403);
   rejected.terminate();
-  for (let attachment = 0; attachment < 2; attachment++) {
+  for (let attachment = 0; attachment < 3; attachment++) {
     const client = connect(pane);
     await once(client.ws, "open");
     const mode = JSON.parse((await client.next()).data.toString());
@@ -242,16 +242,28 @@ try {
     const output = await client.next();
     assert.equal(output.binary, true);
     assert.match(output.data.toString(), /WATCH_STREAM_MARKER/);
-    if (attachment === 0) {
+    if (attachment < 2) {
       client.ws.send(
-        JSON.stringify({
-          type: "input",
-          generation: meta.generation,
-          text: "not allowed",
-        }),
+        JSON.stringify(
+          attachment === 0
+            ? {
+                type: "input",
+                generation: meta.generation,
+                text: "not allowed",
+              }
+            : {
+                type: "scroll",
+                generation: meta.generation,
+                direction: "up",
+                steps: 1,
+                column: 0,
+                row: 0,
+              },
+        ),
       );
       const error = JSON.parse((await client.next()).data.toString());
       assert.equal(error.type, "error");
+      assert.equal(error.reason, "command_not_allowed");
     } else {
       client.ws.send(
         JSON.stringify({
@@ -377,8 +389,13 @@ try {
     hasTouch: true,
   });
   let connections = 0;
-  page.on("websocket", () => {
+  let scrollCommands = 0;
+  page.on("websocket", (socket) => {
     connections++;
+    socket.on("framesent", ({ payload }) => {
+      if (typeof payload === "string" && JSON.parse(payload).type === "scroll")
+        scrollCommands++;
+    });
   });
   const errors = [];
   page.on("pageerror", (error) => errors.push(error.message));
@@ -787,6 +804,141 @@ try {
     "history navigation must keep this draft",
   );
   await page.locator("#composer > summary").click();
+  await page.setViewportSize({ width: 390, height: 1400 });
+  await until(
+    () =>
+      page.evaluate(
+        () =>
+          document.querySelector("#viewport").clientHeight >=
+          document.querySelector(".xterm-screen").getBoundingClientRect()
+            .height,
+      ),
+    "whole terminal visible for scrolling",
+  );
+  const terminalScreen = await page.locator(".xterm-screen").boundingBox();
+  await page.mouse.move(terminalScreen.x + 50, terminalScreen.y + 100);
+  await page.mouse.wheel(0, 120);
+  await historyRow(0).waitFor({ state: "detached", timeout: 5000 });
+  await page.mouse.wheel(0, -120);
+  await historyRow(0).waitFor({ state: "attached", timeout: 5000 });
+  const beforeSelectionScroll = scrollCommands;
+  await page.evaluate(() => {
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(
+      document.querySelector(".xterm-accessibility-tree"),
+    );
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+  await page.mouse.wheel(0, 120);
+  await sleep(100);
+  assert.equal(
+    scrollCommands,
+    beforeSelectionScroll,
+    "selected terminal text prevents remote wheel scrolling",
+  );
+  await page.evaluate(() => window.getSelection().removeAllRanges());
+  // xterm mirrors accessibility selections internally; a normal click clears it.
+  await page.mouse.click(terminalScreen.x + 50, terminalScreen.y + 100);
+  const touch = await page.context().newCDPSession(page);
+  async function swipe(x1, y1, x2, y2) {
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchStart",
+      touchPoints: [{ x: x1, y: y1, id: 1 }],
+    });
+    for (let step = 1; step <= 8; step++) {
+      await touch.send("Input.dispatchTouchEvent", {
+        type: "touchMove",
+        touchPoints: [
+          {
+            x: x1 + ((x2 - x1) * step) / 8,
+            y: y1 + ((y2 - y1) * step) / 8,
+            id: 1,
+          },
+        ],
+      });
+      await sleep(20);
+    }
+    await touch.send("Input.dispatchTouchEvent", {
+      type: "touchEnd",
+      touchPoints: [],
+    });
+    await sleep(100);
+  }
+  await swipe(100, terminalScreen.y + 220, 100, terminalScreen.y + 80);
+  await historyRow(0).waitFor({ state: "detached", timeout: 5000 });
+  await swipe(100, terminalScreen.y + 80, 100, terminalScreen.y + 240);
+  await historyRow(0).waitFor({ state: "attached", timeout: 5000 });
+  const beforeHorizontal = scrollCommands;
+  await swipe(250, terminalScreen.y + 80, 60, terminalScreen.y + 80);
+  await until(
+    () =>
+      page.locator("#viewport").evaluate((element) => element.scrollLeft > 0),
+    "native horizontal touch panning",
+  );
+  assert.equal(
+    scrollCommands,
+    beforeHorizontal,
+    "horizontal panning sends no terminal scroll",
+  );
+  assert.equal(await page.locator("#picker").inputValue(), historyPane);
+  await page.locator("#viewport").evaluate((element) => {
+    element.scrollLeft = 0;
+  });
+  const beforeMultiTouch = scrollCommands;
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [
+      { x: 80, y: terminalScreen.y + 100, id: 1 },
+      { x: 180, y: terminalScreen.y + 100, id: 2 },
+    ],
+  });
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [
+      { x: 80, y: terminalScreen.y + 160, id: 1 },
+      { x: 180, y: terminalScreen.y + 160, id: 2 },
+    ],
+  });
+  await touch.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await sleep(100);
+  assert.equal(
+    scrollCommands,
+    beforeMultiTouch,
+    "multi-touch does not scroll the application",
+  );
+  await page.setViewportSize({ width: 390, height: 600 });
+  await until(
+    () =>
+      page
+        .locator("#viewport")
+        .evaluate((element) => element.clientHeight < 400),
+    "short terminal viewport",
+  );
+  const clipped = await page.locator("#viewport").boundingBox();
+  await page.mouse.move(clipped.x + 50, clipped.y + 50);
+  const beforePan = scrollCommands;
+  await page.mouse.wheel(0, 60);
+  await until(
+    () =>
+      page.locator("#viewport").evaluate((element) => element.scrollTop > 0),
+    "clipped screen pans before remote scrolling",
+  );
+  await sleep(80);
+  assert.equal(scrollCommands, beforePan);
+  await page.locator("#viewport").evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await page.mouse.wheel(0, 120);
+  await historyRow(0).waitFor({ state: "detached", timeout: 5000 });
+  await page.setViewportSize({ width: 390, height: 1400 });
+  await page.getByRole("button", { name: "Top", exact: true }).tap();
+  await historyRow(0).waitFor({ state: "attached" });
+  await touch.detach();
   await page.getByRole("button", { name: "Page down", exact: true }).tap();
   await historyRow(20).waitFor({ state: "attached" });
   await historyRow(0).waitFor({ state: "detached" });
@@ -803,6 +955,16 @@ try {
   await page.getByRole("button", { name: "Release", exact: true }).click();
   await page.locator("#status").filter({ hasText: "read-only" }).waitFor();
   for (const button of historyButtons) assert(await button.isDisabled());
+  const beforeWatchScroll = scrollCommands;
+  const watched = await page.locator(".xterm-screen").boundingBox();
+  await page.mouse.move(watched.x + 50, watched.y + 50);
+  await page.mouse.wheel(0, 120);
+  await sleep(100);
+  assert.equal(
+    scrollCommands,
+    beforeWatchScroll,
+    "watch-mode wheel input is never forwarded",
+  );
   assert.equal(await page.locator("#picker").inputValue(), historyPane);
   cli(
     "pane",

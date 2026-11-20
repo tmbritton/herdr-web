@@ -23,8 +23,11 @@ import type {
 } from "./domain.ts";
 import { boundedEvents } from "./events.ts";
 import { clearTerminal, writeTerminal } from "./terminal.ts";
+import { terminalScroll } from "./scroll.ts";
+import type { ScrollIntent } from "./machine.ts";
 
 export type UiEvent =
+  | ScrollIntent
   | { readonly _tag: "Select"; readonly value: string }
   | { readonly _tag: "Navigate"; readonly delta: -1 | 1 }
   | { readonly _tag: "Refresh" }
@@ -173,6 +176,7 @@ export class BrowserUi extends Context.Service<
           new UiError({ message: "Could not initialize the terminal" }),
       });
       const visibleView = yield* Ref.make<Option.Option<View>>(Option.none());
+      const screen = yield* element("#terminal .xterm-screen", HTMLElement);
       const keyButtons = [
         ...document.querySelectorAll("button[data-key]"),
       ].filter(
@@ -190,8 +194,30 @@ export class BrowserUi extends Context.Service<
         id: SubmissionId;
         key: string;
         revision: number;
+        lease: ControlLease;
         cancelled: boolean;
       }> = Option.none();
+      const scrolling = terminalScroll(
+        dom.viewport,
+        screen,
+        () => {
+          const view = Option.getOrUndefined(Ref.getUnsafe(visibleView));
+          return view?._tag === "Controlling" && !document.hidden
+            ? view
+            : undefined;
+        },
+        () =>
+          terminal.hasSelection() ||
+          window.getSelection()?.isCollapsed === false,
+        (lease) => {
+          if (
+            Option.isSome(pending) &&
+            pending.value.lease.attachment === lease.attachment &&
+            pending.value.lease.generation === lease.generation
+          )
+            pending = Option.some({ ...pending.value, cancelled: true });
+        },
+      );
       const setCtrl = (enabled: boolean) => {
         ctrlArmed = enabled;
         dom.ctrl.setAttribute("aria-pressed", String(enabled));
@@ -471,6 +497,7 @@ export class BrowserUi extends Context.Service<
               id,
               key: draftKey,
               revision: draftRevision,
+              lease: view.lease,
               cancelled: false,
             });
             setCtrl(false);
@@ -686,7 +713,7 @@ export class BrowserUi extends Context.Service<
       );
       return BrowserUi.of({
         visible: Effect.sync(() => !document.hidden),
-        events: Stream.merge(events, resizes),
+        events: Stream.merge(Stream.merge(events, resizes), scrolling),
         clear: clearTerminal(terminal),
         render: (frame, bytes, reset) =>
           writeTerminal(terminal, frame, bytes, reset),

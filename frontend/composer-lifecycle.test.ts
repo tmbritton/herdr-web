@@ -1,7 +1,7 @@
 import { assert, it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Queue, Schema, Stream } from "effect";
 import { TestClock } from "effect/testing";
-import { Snapshot, SubmissionId } from "./domain.ts";
+import { Snapshot, SubmissionId, Scroll } from "./domain.ts";
 import type { ControlLease, WatchLease } from "./domain.ts";
 import { runApplication } from "./application.ts";
 import { PreferenceStore } from "./preferences.ts";
@@ -9,7 +9,7 @@ import { BridgeTransport } from "./transport.ts";
 import { BrowserUi } from "./ui.ts";
 import type { UiEvent } from "./ui.ts";
 
-it.effect.each(["release", "switch", "hide", "reconnect"] as const)(
+it.effect.each(["release", "switch", "hide", "reconnect", "scroll"] as const)(
   "%s cancels a composer that is waiting to send Enter",
   (action) =>
     Effect.gen(function* () {
@@ -77,8 +77,8 @@ it.effect.each(["release", "switch", "hide", "reconnect"] as const)(
                     sent.push(command.text);
                     yield* Deferred.succeed(pasted, undefined);
                   }
-                  if (command.type === "release") {
-                    sent.push("release");
+                  if (command.type === "release" || command.type === "scroll") {
+                    sent.push(command.type);
                     yield* Deferred.succeed(released, undefined);
                   }
                 }),
@@ -118,21 +118,32 @@ it.effect.each(["release", "switch", "hide", "reconnect"] as const)(
       });
       yield* Deferred.await(pasted);
       const cancellation: UiEvent =
-        action === "release"
-          ? { _tag: "Release", lease }
-          : action === "switch"
-            ? { _tag: "Select", value: "w1:p2" }
-            : action === "hide"
-              ? { _tag: "Visibility", visible: false }
-              : { _tag: "Reconnect" };
+        action === "scroll"
+          ? {
+              _tag: "Scroll",
+              lease,
+              scroll: yield* Schema.decodeUnknownEffect(Scroll)({
+                direction: "up",
+                steps: 1,
+                column: 0,
+                row: 0,
+              }),
+            }
+          : action === "release"
+            ? { _tag: "Release", lease }
+            : action === "switch"
+              ? { _tag: "Select", value: "w1:p2" }
+              : action === "hide"
+                ? { _tag: "Visibility", visible: false }
+                : { _tag: "Reconnect" };
       yield* Queue.offer(events, cancellation);
       yield* Effect.yieldNow;
       yield* TestClock.adjust("200 millis");
       yield* Deferred.await(released);
       assert.deepEqual(
         sent,
-        action === "release"
-          ? ["\x1b[200~hello\x1b[201~", "release"]
+        action === "release" || action === "scroll"
+          ? ["\x1b[200~hello\x1b[201~", action]
           : ["\x1b[200~hello\x1b[201~"],
       );
       yield* Fiber.interrupt(fiber);

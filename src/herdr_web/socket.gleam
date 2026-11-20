@@ -305,12 +305,37 @@ fn handle_command(state: State, cmd: command.Command, connection) {
           )
       }
     }
+    command.Scroll(_, direction, steps, column, row), Some(worker)
+      if state.mode == Controlling && column < state.cols && row < state.rows
+    ->
+      write_repeated(
+        state,
+        worker,
+        json.object([
+          #("type", json.string("terminal.scroll")),
+          #("direction", json.string(direction)),
+          #("source", json.string("wheel")),
+          #("lines", json.int(3)),
+          #("column", json.int(column)),
+          #("row", json.int(row)),
+        ]),
+        steps,
+        connection,
+      )
     _, _ -> fail(connection, "command_not_allowed")
   }
 }
 
 fn write(state, worker, message, connection) {
-  case child.write(worker, json.to_string(message) <> "\n") {
+  write_repeated(state, worker, message, 1, connection)
+}
+
+fn write_repeated(state, worker, message, count, connection) {
+  // Herdr emits one application mouse event per record regardless of `lines`.
+  // Repeating bounded steps gives consistent wheel and host-scrollback motion.
+  let data =
+    list.repeat(json.to_string(message) <> "\n", count) |> string.concat
+  case child.write(worker, data) {
     Ok(_) -> mist.continue(state)
     Error(reason) -> failed(state, connection, reason)
   }

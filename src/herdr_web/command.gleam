@@ -5,6 +5,7 @@ pub type Command {
   Release(generation: Int)
   Input(generation: Int, text: String)
   Resize(generation: Int, cols: Int, rows: Int)
+  Scroll(generation: Int, direction: String, steps: Int, column: Int, row: Int)
 }
 
 pub fn decode(text: String) -> Result(Command, String) {
@@ -31,6 +32,13 @@ pub fn decode(text: String) -> Result(Command, String) {
         use rows <- d.field("rows", d.int)
         d.success(Resize(generation, cols, rows))
       }
+      "scroll" -> {
+        use direction <- d.field("direction", d.string)
+        use steps <- d.field("steps", d.int)
+        use column <- d.field("column", d.int)
+        use row <- d.field("row", d.int)
+        d.success(Scroll(generation, direction, steps, column, row))
+      }
       _ -> d.failure(Release(0), "known client command")
     }
   }
@@ -45,6 +53,16 @@ pub fn decode(text: String) -> Result(Command, String) {
         False -> Error("invalid_generation")
         True ->
           case cmd {
+            Scroll(_, direction, steps, column, row)
+              if direction != "up"
+              && direction != "down"
+              || steps < 1
+              || steps > 8
+              || column < 0
+              || column >= 1000
+              || row < 0
+              || row >= 500
+            -> Error("invalid_scroll")
             Resize(_, cols, rows)
               if cols < 1 || cols > 400 || rows < 1 || rows > 200
             -> Error("invalid_dimensions")
@@ -67,7 +85,8 @@ pub fn generation(cmd: Command) -> Int {
     | Control(g, _)
     | Release(g)
     | Input(g, _)
-    | Resize(g, _, _) -> g
+    | Resize(g, _, _)
+    | Scroll(g, _, _, _, _) -> g
   }
 }
 

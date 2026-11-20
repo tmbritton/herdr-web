@@ -19,6 +19,15 @@ session rather than the user's running panes. Source cross-check: upstream tag
   base64 `bytes`), `terminal.resize` (`cols`, `rows`), `terminal.scroll`, and
   `terminal.release`. Release exits successfully. `--takeover` is explicit.
 - Version 0.8.2 has no `terminal.mouse` command, despite newer documentation.
+- `terminal.scroll` accepts `source=wheel`, `direction=up|down`, positive `lines`
+  and zero-based cell `column`/`row`. Herdr routes it to the application's mouse
+  protocol, alternate-scroll arrows or host scrollback according to the actual
+  PTY modes. The mouse/alternate path emits **one event per record**, regardless
+  of `lines`; the host-scrollback path uses `lines`.
+  The bridge coalesces gestures over 32 ms and sends at most eight wheel steps per
+  command, expanding to up to eight CLI records with `lines=3`. Both endpoints
+  require the current control generation and an in-bounds cell. Disposable SGR
+  mouse-TUI tests and a real OpenCode 1.19.5 probe verified scrolling both ways.
 - Rendered ANSI does not necessarily reproduce the application's input modes.
   In particular, do not infer bracketed-paste state from the rendered frame.
   `pane run` uses Herdr's atomic text-and-Enter input encoder; `pane send-text`

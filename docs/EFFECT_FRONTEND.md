@@ -35,6 +35,14 @@ examples use different Schema, service, stream and error-handling APIs.
   It schema-decodes bounded transcript pages, pins session identity, interrupts
   superseded requests with `Stream.switchMap`, and renders content as plain text.
   Hex-encoded UTF-8 chunks preserve NUL and codepoints across page boundaries.
+- Scrolling is a branded, bounded control intent. A scoped 32 ms coalescer keeps
+  one pending gesture batch and one wakeup, then checks ownership and geometry
+  before dispatch. Mode/attachment changes, hiding and scope exit discard pending
+  movement; later input is never replayed. Accepted scroll input invalidates a
+  matching pending composer at capture time, before batching, so a delayed Enter
+  cannot win the scheduling race. Selection is rechecked before batch dispatch.
+  DOM listeners and the batching fiber
+  share the UI stream scope; TestClock covers coalescing and cancellation.
 - Enable strict TypeScript and type-aware ESLint plus Effect's compiler
   diagnostics. Tests include schema boundaries, state/capability transitions,
   cancellation, cleanup, backpressure and deterministic virtual-time cases.

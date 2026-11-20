@@ -123,6 +123,20 @@ require a later hands-on check; report them separately from browser simulation.
   two process-helper tests, production-shipment browser integration and packaging
   validation passed.
 
+## Follow-up: terminal wheel and touch scrolling
+
+- [x] Forward wheel/trackpad and vertical single-touch gestures through the owned
+  Herdr controller. Decoder and real browser regressions failed before the change.
+  Preserve horizontal panning, clipped-screen panning and multi-touch behavior;
+  watch mode must not send scrolling input. Bounded batches recheck the lease and
+  geometry; scrolling cancels a delayed composer Enter. A disposable real OpenCode
+  1.19.5 probe verified wheel input up/down through its retained messages.
+  Checks, 27 Gleam tests, 42 Effect tests, two process-helper tests and exported
+  production browser integration passed. Independent re-review approved.
+- Scrolling review found wheel input bypassed the selection guard and coalescing
+  could delay composer cancellation until after Enter. Both had failing
+  regressions; capture-time invalidation and selection checks now cover them.
+
 ## Remaining hands-on acceptance
 
 - [ ] Pixel 9 Fold: outer display → unfold → keyboard/dictation → rotation →
@@ -135,3 +149,5 @@ require a later hands-on check; report them separately from browser simulation.
   the next normal reboot (service enablement/lingering are checked separately).
 - [ ] Full history: read from Beginning through multiple pages on the phone and
   return to the live terminal; verify any customized OpenCode navigation bindings.
+- [ ] Pixel Fold terminal gestures: vertical history scrolling, horizontal panning,
+  selection and pinch zoom, including clipped and explicitly fitted geometries.

@@ -60,6 +60,14 @@ export type InputText = typeof InputText.Type;
 export const TerminalBytes = Schema.Uint8Array.check(
   Schema.isMaxLength(1048576),
 );
+const ScrollFields = {
+  direction: Schema.Literals(["up", "down"]),
+  steps: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 8 })),
+  column: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 999 })),
+  row: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 499 })),
+};
+export const Scroll = Schema.Struct(ScrollFields).pipe(Schema.brand("Scroll"));
+export type Scroll = typeof Scroll.Type;
 
 export const Frame = Schema.Struct({
   type: Schema.Literal("frame"),
@@ -114,6 +122,11 @@ export const ClientCommand = Schema.Union([
     generation: Generation,
     cols: ControlCols,
     rows: ControlRows,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("scroll"),
+    generation: Generation,
+    ...ScrollFields,
   }),
 ]);
 export type ClientCommand = typeof ClientCommand.Type;

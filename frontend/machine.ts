@@ -7,6 +7,7 @@ import type {
   Frame,
   InputText,
   ModeRecord,
+  Scroll,
   View,
   WatchLease,
 } from "./domain.ts";
@@ -63,7 +64,13 @@ export type Intent =
       readonly _tag: "Resize";
       readonly lease: ControlLease;
       readonly dimensions: Dimensions;
+    }
+  | {
+      readonly _tag: "Scroll";
+      readonly lease: ControlLease;
+      readonly scroll: Scroll;
     };
+export type ScrollIntent = Extract<Intent, { readonly _tag: "Scroll" }>;
 
 export const initial = (attachment: AttachmentId): Machine => ({
   [machineBrand]: true,
@@ -326,6 +333,20 @@ export const authorize = Effect.fnUntraced(function* (
       return {
         machine,
         command: { type: "resize", generation, ...intent.dimensions },
+      };
+    }
+    case "Scroll": {
+      if (view._tag !== "Controlling")
+        return yield* new CommandRejected({
+          message: "Scrolling requires control",
+        });
+      if (intent.scroll.column >= view.cols || intent.scroll.row >= view.rows)
+        return yield* new CommandRejected({
+          message: "Scroll position is outside the terminal",
+        });
+      return {
+        machine,
+        command: { type: "scroll", generation, ...intent.scroll },
       };
     }
   }

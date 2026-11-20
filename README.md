@@ -104,6 +104,12 @@ desktop-TUI handoff and Pixel Fold transitions still need hands-on validation.
   and End to the controlled application. OpenCode 1.19.5 retains only 100 messages
   in its TUI, so use **Full history** for older content. Other applications and
   customized keybindings may interpret these keys differently.
+- While controlling, use the **mouse wheel/trackpad or a vertical one-finger swipe**
+  in the terminal to scroll the application's retained history. Horizontal swipes
+  pan wide terminals. If the screen is taller than the container, vertical motion
+  first pans the clipped screen, then scrolls the application at the edge; **Fit
+  terminal** removes that extra panning. Watch mode keeps gestures local. Pinch
+  zoom, modified wheel gestures and text selection are not forwarded as scrolling.
 - **Keyboard** focuses the live terminal input. The bottom toolbar provides
   `Esc`, `Tab`, arrows, `Ctrl`, `Ctrl+C` and `Enter`. Ctrl is a one-shot modifier
   for the next terminal key; input remains disabled in watch mode.

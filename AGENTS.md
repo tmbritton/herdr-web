@@ -90,6 +90,9 @@ Use **Effect 4**, following `docs/EFFECT_FRONTEND.md` and the pinned package's
   drafts, and ownership/visibility recheck before Enter. Never auto-resubmit.
   Clear only an unchanged draft after successful submission; preserve newer edits
   and failed/cancelled drafts. Toolbar Enter submits a focused composer draft.
+- Wheel and vertical single-touch scrolling require a current control lease.
+  Preserve native horizontal panning/zoom and selection. Keep gesture batches
+  bounded/scoped, recheck geometry and ownership, and never replay stale movement.
 
 ### Service deployment
 

@@ -155,6 +155,11 @@ Herdr streams screen repaints, rather than a complete conversation log. Home/End
 and Page Up/Down controls navigate the application's retained history while
 controlling. A real OpenCode 1.19.5 probe confirmed its TUI loads only the latest
 100 messages, so those keys alone cannot reach the first message of a long session.
+Controlled wheel/trackpad input and vertical single-touch gestures also navigate
+that retained view through Herdr's application-aware `terminal.scroll` protocol.
+Horizontal panning stays native; clipped terminal rows pan locally before motion
+at an edge is forwarded. Gesture batches are bounded, scoped and revalidated
+against control ownership and geometry. Watch-mode gestures never send input.
 
 The user chose a separate **Full history** view. It resolves the OpenCode session
 from `herdr pane get`, reads the configured local database with `sqlite3 -readonly`,

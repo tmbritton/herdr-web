@@ -1,6 +1,6 @@
 import { assert, describe, it } from "@effect/vitest";
 import { Effect, Schema } from "effect";
-import { AttachmentId, InputText } from "./domain.ts";
+import { AttachmentId, InputText, Scroll } from "./domain.ts";
 import {
   authorize,
   complete,
@@ -113,6 +113,26 @@ describe("terminal protocol state and capabilities", () => {
         if (machine.view._tag !== "Controlling")
           return yield* Effect.die("expected control capability");
         const lease = machine.view.lease;
+        const scroll = yield* Schema.decodeUnknownEffect(Scroll)({
+          direction: "up",
+          steps: 2,
+          column: 79,
+          row: 23,
+        });
+        assert.equal(
+          (yield* authorize(machine, { _tag: "Scroll", lease, scroll })).command
+            .type,
+          "scroll",
+        );
+        const outside = yield* Schema.decodeUnknownEffect(Scroll)({
+          ...scroll,
+          column: 80,
+        });
+        assert.isTrue(
+          yield* Effect.isFailure(
+            authorize(machine, { _tag: "Scroll", lease, scroll: outside }),
+          ),
+        );
         const text = yield* Schema.decodeUnknownEffect(InputText)("hello\r");
         assert.equal(
           (yield* authorize(machine, { _tag: "Input", lease, text })).command
@@ -122,10 +142,20 @@ describe("terminal protocol state and capabilities", () => {
         const released = yield* authorize(machine, { _tag: "Release", lease });
         assert.isTrue(
           yield* Effect.isFailure(
+            authorize(released.machine, { _tag: "Scroll", lease, scroll }),
+          ),
+        );
+        assert.isTrue(
+          yield* Effect.isFailure(
             authorize(released.machine, { _tag: "Input", lease, text }),
           ),
         );
         const id = yield* Schema.decodeUnknownEffect(AttachmentId)(2);
+        assert.isTrue(
+          yield* Effect.isFailure(
+            authorize(initial(id), { _tag: "Scroll", lease, scroll }),
+          ),
+        );
         assert.isTrue(
           yield* Effect.isFailure(
             authorize(initial(id), { _tag: "Input", lease, text }),

@@ -6,23 +6,39 @@ const total = 10000;
 const rows = 20;
 let top = total - rows;
 let pending = "";
+let wheelPosition = "";
 function render() {
   const lines = Array.from(
     { length: rows },
     (_, row) => `HISTORY_ROW_${String(top + row).padStart(5, "0")}`,
   );
-  process.stdout.write(`\x1b[2J\x1b[H${lines.join("\r\n")}`);
+  process.stdout.write(
+    `\x1b[2J\x1b[H${lines.join("\r\n")}\r\n${wheelPosition}`,
+  );
 }
 process.stdin.setRawMode(true);
-process.stdout.write("\x1b[?1049h");
+process.stdout.write("\x1b[?1049h\x1b[?1000h\x1b[?1006h");
 process.on("exit", () => {
   process.stdin.setRawMode(false);
-  process.stdout.write("\x1b[?1049l");
+  process.stdout.write("\x1b[?1000l\x1b[?1006l\x1b[?1049l");
 });
 process.stdin.on("data", (data) => {
   pending += data.toString();
   while (pending.length > 0) {
     if (pending.startsWith("\x03")) process.exit(0);
+    const wheel = pending.startsWith("\x1b")
+      ? /^\[<(64|65);(\d+);(\d+)M/.exec(pending.slice(1))
+      : null;
+    if (wheel) {
+      top = Math.max(
+        0,
+        Math.min(total - rows, top + (wheel[1] === "64" ? -3 : 3)),
+      );
+      wheelPosition = `WHEEL_AT_${wheel[2]}_${wheel[3]}`;
+      pending = pending.slice(wheel[0].length + 1);
+      render();
+      continue;
+    }
     const match = pending.startsWith("\x1b")
       ? /^\[(H|F|5~|6~)/.exec(pending.slice(1))
       : null;
@@ -43,7 +59,10 @@ process.stdin.on("data", (data) => {
       }
       pending = pending.slice(match[0].length + 1);
       render();
-    } else if (["\x1b", "\x1b[", "\x1b[5", "\x1b[6"].includes(pending)) {
+    } else if (
+      ["\x1b", "\x1b[", "\x1b[5", "\x1b[6"].includes(pending) ||
+      (pending.startsWith("\x1b[<") && !pending.includes("M"))
+    ) {
       break;
     } else pending = pending.slice(1);
   }
