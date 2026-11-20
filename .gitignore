@@ -3,3 +3,7 @@
 /.env
 /.env.*
 /mise.local.toml
+/node_modules/
+/priv/static/
+/test-results/
+/playwright-report/

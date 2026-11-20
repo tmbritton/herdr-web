@@ -1,0 +1,207 @@
+// Real Herdr integration against a unique disposable session; never user panes.
+import assert from "node:assert/strict";
+import { execFileSync, spawn } from "node:child_process";
+import { createServer } from "node:net";
+import { once } from "node:events";
+import { setTimeout as sleep } from "node:timers/promises";
+import WebSocket from "ws";
+import { chromium } from "@playwright/test";
+
+const session = `herdr-web-test-${process.pid}-${Date.now().toString(36)}`;
+const env = Object.fromEntries(
+  Object.entries(process.env).filter(([key]) => !key.startsWith("HERDR_")),
+);
+const cli = (...args) => {
+  const output = execFileSync("herdr", ["--session", session, ...args], {
+    env,
+    encoding: "utf8",
+    timeout: 15000,
+  });
+  return output.trim() ? JSON.parse(output) : {};
+};
+const listener = createServer();
+listener.listen(0, "127.0.0.1");
+await once(listener, "listening");
+const port = listener.address().port;
+await new Promise((resolve) => listener.close(resolve));
+const base = `http://127.0.0.1:${port}`;
+const server = spawn("herdr", ["--session", session, "server"], {
+  env,
+  stdio: "ignore",
+});
+let bridge;
+let browser;
+let bridgeLog = "";
+const sockets = [];
+async function until(fn, description) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    try {
+      if (await fn()) return;
+    } catch {
+      /* startup can race */
+    }
+    await sleep(100);
+  }
+  throw new Error(`Timeout: ${description}\n${bridgeLog}`);
+}
+function connect(pane, origin = base) {
+  const ws = new WebSocket(
+    `${base.replace("http", "ws")}/ws/${encodeURIComponent(pane)}`,
+    { origin },
+  );
+  sockets.push(ws);
+  ws.on("error", () => {});
+  const queue = [];
+  let waiting;
+  ws.on("message", (data, binary) => {
+    const value = { data, binary };
+    if (waiting) {
+      const resolve = waiting;
+      waiting = undefined;
+      resolve(value);
+    } else queue.push(value);
+  });
+  return {
+    ws,
+    next: () => {
+      if (queue.length) return Promise.resolve(queue.shift());
+      return Promise.race([
+        new Promise((resolve) => {
+          waiting = resolve;
+        }),
+        sleep(5000).then(() => {
+          throw new Error("No websocket frame");
+        }),
+      ]);
+    },
+  };
+}
+try {
+  await until(() => cli("pane", "list").result, "Herdr startup");
+  const created = cli(
+    "workspace",
+    "create",
+    "--cwd",
+    process.cwd(),
+    "--label",
+    "Bridge integration",
+    "--no-focus",
+  );
+  const pane = created.result.root_pane.pane_id;
+  cli("pane", "run", pane, "printf 'WATCH_STREAM_MARKER\\n'");
+  await sleep(200);
+  const before = cli("api", "snapshot").result.snapshot;
+  bridge = spawn("gleam", ["run"], {
+    detached: true,
+    env: {
+      ...env,
+      HERDR_WEB_SESSION: session,
+      HERDR_WEB_PORT: String(port),
+      HERDR_WEB_ORIGINS: base,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  for (const stream of [bridge.stdout, bridge.stderr])
+    stream.on("data", (data) => {
+      bridgeLog = (bridgeLog + String(data)).slice(-8000);
+    });
+  await until(
+    async () => (await fetch(`${base}/healthz`)).ok,
+    "bridge startup",
+  );
+  const rejected = connect(pane, "https://untrusted.example").ws;
+  const [, response] = await once(rejected, "unexpected-response");
+  assert.equal(response.statusCode, 403);
+  rejected.terminate();
+  for (let attachment = 0; attachment < 2; attachment++) {
+    const client = connect(pane);
+    await once(client.ws, "open");
+    const meta = JSON.parse((await client.next()).data.toString());
+    assert.equal(meta.type, "frame");
+    assert.equal(meta.full, true);
+    assert.equal(meta.cols, 120);
+    const output = await client.next();
+    assert.equal(output.binary, true);
+    assert.match(output.data.toString(), /WATCH_STREAM_MARKER/);
+    if (attachment === 0) {
+      client.ws.send(JSON.stringify({ type: "input", text: "not allowed" }));
+      const error = JSON.parse((await client.next()).data.toString());
+      assert.equal(error.type, "error");
+    } else {
+      client.ws.send(JSON.stringify({ type: "ack", seq: meta.seq }));
+    }
+    client.ws.close();
+    await until(
+      () => client.ws.readyState === WebSocket.CLOSED,
+      "socket close",
+    );
+  }
+  const after = cli("api", "snapshot").result.snapshot;
+  assert.equal(after.focused_pane_id, before.focused_pane_id);
+  assert.deepEqual(after.layouts, before.layouts);
+  browser = await chromium.launch({ headless: true });
+  const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(error.message));
+  await page.goto(base);
+  await page.locator("#pane").fill(pane);
+  await page.getByRole("button", { name: "Watch", exact: true }).click();
+  await page.locator("#status").filter({ hasText: "read-only" }).waitFor();
+  assert(await page.locator(".xterm-screen").isVisible());
+  await page
+    .locator(".xterm-accessibility-tree")
+    .filter({ hasText: "WATCH_STREAM_MARKER" })
+    .waitFor({ state: "attached" });
+  cli("pane", "run", pane, "printf 'WATCH_STREAM_NEXT\\n'");
+  await page
+    .locator(".xterm-accessibility-tree")
+    .filter({ hasText: "WATCH_STREAM_NEXT" })
+    .waitFor({ state: "attached" });
+  await page.locator("#pane").fill("w1:p999999");
+  await page.getByRole("button", { name: "Watch", exact: true }).click();
+  await until(
+    async () =>
+      !(await page.locator(".xterm-accessibility-tree").innerText()).includes(
+        "WATCH_STREAM_MARKER",
+      ),
+    "previous pane output cleared on failed switch",
+  );
+  assert.deepEqual(errors, []);
+  await page.close();
+  await until(() => {
+    const processes = execFileSync("ps", ["-eo", "args"], { encoding: "utf8" });
+    return !processes
+      .split("\n")
+      .some(
+        (line) =>
+          line.includes(session) && line.includes("terminal session observe"),
+      );
+  }, "observer cleanup");
+  console.log(
+    "PASS: real Herdr frames, fresh attachment, origin rejection, watch-only input, desktop non-interference, browser rendering, observer cleanup",
+  );
+} finally {
+  for (const socket of sockets) socket.terminate();
+  if (browser) await browser.close();
+  if (bridge) {
+    try {
+      process.kill(-bridge.pid, "SIGTERM");
+    } catch {
+      /* already exited */
+    }
+  }
+  try {
+    cli("server", "stop");
+  } finally {
+    server.kill("SIGTERM");
+    try {
+      execFileSync("herdr", ["session", "delete", session], {
+        env,
+        stdio: "ignore",
+        timeout: 15000,
+      });
+    } catch {
+      /* retain logs if shutdown failed */
+    }
+  }
+}

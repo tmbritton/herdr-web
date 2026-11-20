@@ -1,0 +1,69 @@
+@import "@xterm/xterm/css/xterm.css";
+:root {
+  color-scheme: dark;
+  font:
+    15px/1.4 system-ui,
+    sans-serif;
+  background: #10151c;
+  color: #e3eaf4;
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+header {
+  padding: 0.6rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.7rem;
+  border-bottom: 1px solid #344150;
+}
+h1 {
+  font-size: 1rem;
+  margin: 0;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  border: 1px solid #52657d;
+  border-radius: 0.4rem;
+  padding: 0.5rem;
+  color: inherit;
+  background: #202b39;
+}
+button {
+  cursor: pointer;
+  min-height: 42px;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+#status {
+  font-size: 0.85rem;
+}
+#viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.4rem;
+}
+#terminal {
+  width: max-content;
+}
+form {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+input {
+  width: 9rem;
+}

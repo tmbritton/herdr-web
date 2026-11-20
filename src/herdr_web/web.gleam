@@ -2,10 +2,50 @@ import gleam/bytes_tree
 import gleam/http.{Get, Head}
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
+import gleam/list
+import gleam/result
+import gleam/uri
+import herdr_web/config.{type Config}
+import herdr_web/socket
 import mist.{type ResponseData}
 
 // The handler does not depend on the request body until streaming is added.
-pub fn handle_request(req: Request(body)) -> Response(ResponseData) {
+pub fn handle_request(req: Request(mist.Connection)) -> Response(ResponseData) {
+  handle(config.default(), req)
+}
+
+pub fn handle(
+  cfg: Config,
+  req: Request(mist.Connection),
+) -> Response(ResponseData) {
+  case req.method, request.path_segments(req) {
+    Get, ["ws", encoded] -> {
+      let pane = uri.percent_decode(encoded) |> result.unwrap("")
+      let origins =
+        list.filter(req.headers, fn(header) { header.0 == "origin" })
+      let host = request.get_header(req, "host") |> result.unwrap("")
+      case origins {
+        [#(_, origin)] if origin != "" -> {
+          case
+            config.allowed_origin(cfg, origin)
+            && config.allowed_host(cfg, host)
+            && config.valid_pane(pane)
+          {
+            True -> socket.upgrade(req, cfg, pane)
+            False ->
+              text(403, "Forbidden\n")
+              |> response.set_header("connection", "close")
+          }
+        }
+        _ ->
+          text(403, "Forbidden\n") |> response.set_header("connection", "close")
+      }
+    }
+    _, _ -> ordinary(req)
+  }
+}
+
+fn ordinary(req: Request(body)) -> Response(ResponseData) {
   let res = case req.method {
     Get | Head -> get(req.path)
     _ ->
@@ -25,10 +65,10 @@ pub fn handle_request(req: Request(body)) -> Response(ResponseData) {
 
 fn get(path: String) -> Response(ResponseData) {
   case path {
-    "/" ->
-      response.new(200)
-      |> response.set_header("content-type", "text/html; charset=utf-8")
-      |> response.set_body(mist.Bytes(bytes_tree.from_string(index)))
+    "/" -> asset_response("index.html", "text/html; charset=utf-8")
+    "/assets/app.js" ->
+      asset_response("app.js", "text/javascript; charset=utf-8")
+    "/assets/app.css" -> asset_response("app.css", "text/css; charset=utf-8")
     // Liveness only: this does not imply that Herdr is connected or ready.
     "/healthz" -> text(200, "ok\n")
     _ -> text(404, "Not found\n")
@@ -41,26 +81,17 @@ fn text(status: Int, body: String) -> Response(ResponseData) {
   |> response.set_body(mist.Bytes(bytes_tree.from_string(body)))
 }
 
-const index =
-  "<!doctype html>
-<html lang=\"en\">
-  <head>
-    <meta charset=\"utf-8\">
-    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
-    <title>Herdr Web Terminal Bridge</title>
-    <style>
-      :root { color-scheme: light dark; font: 1rem/1.6 system-ui, sans-serif; }
-      body { max-width: 42rem; margin: 0 auto; padding: 2rem 1rem; }
-    </style>
-  </head>
-  <body>
-    <main>
-      <h1>Herdr Web Terminal Bridge</h1>
-      <p>The Gleam/Mist server is running.</p>
-      <p>Next milestone: stream an existing Herdr pane into this browser.</p>
-      <p>Terminal viewing and control are not implemented yet.</p>
-      <a href=\"/healthz\">Server health</a>
-    </main>
-  </body>
-</html>
-"
+fn asset_response(name, content_type) {
+  case asset(name) {
+    Ok(bytes) ->
+      response.new(200)
+      |> response.set_header("content-type", content_type)
+      |> response.set_header("cache-control", "no-cache")
+      |> response.set_header("x-content-type-options", "nosniff")
+      |> response.set_body(mist.Bytes(bytes_tree.from_bit_array(bytes)))
+    Error(_) -> text(503, "Browser assets missing; run mise run build\n")
+  }
+}
+
+@external(erlang, "herdr_web_runtime", "asset")
+fn asset(name: String) -> Result(BitArray, Nil)

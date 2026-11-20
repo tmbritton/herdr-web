@@ -2,9 +2,9 @@
 
 A mobile-friendly browser bridge to persistent Herdr terminal panes, built around Gleam on the BEAM, Mist, xterm.js, and private access through Tailscale Serve.
 
-**Status:** Initial scaffold. A Gleam/Mist server serves a small landing page and
-`GET /healthz` on `127.0.0.1:3000`. Terminal streaming, pane discovery, and control
-are the next implementation milestones.
+**Status:** Live watch streaming. Enter a pane ID to watch its rendered terminal
+in xterm.js at `http://127.0.0.1:3000`. Pane discovery and interactive control are
+the next implementation milestones. `/healthz` checks bridge liveness.
 
 ## Tooling and deployment choice
 
@@ -30,6 +30,7 @@ Install [mise](https://mise.jdx.dev/), then run from this directory:
 ```bash
 mise trust
 mise install
+mise exec -- npm ci
 mise run hooks:install
 mise run dev
 ```
@@ -48,15 +49,35 @@ mise run test     # Real HTTP integration test on an OS-assigned loopback port
 mise run export   # Production bundle in build/erlang-shipment/
 ```
 
-The test does not require a running Herdr server. `/healthz` is a **bridge liveness
-check**, not a check of Herdr connectivity. Herdr is not invoked by the scaffold.
+Unit tests do not require Herdr. The optional `mise exec -- npm run test:integration`
+creates and cleans up its own named Herdr session and runs real WebSocket and
+Chromium checks. Install Chromium once with `mise exec -- npx playwright install
+chromium`. Existing panes are not used by the test.
+
+For watch mode, enter a stable pane ID from `herdr pane list`. The terminal keeps
+the stream's dimensions and can be panned horizontally. Browser input is disabled.
+Frames are acknowledged only after xterm.js processes them; reconnecting creates
+a fresh attachment.
+
+Configuration is read at startup:
+
+| Variable | Default / purpose |
+| --- | --- |
+| `HERDR_WEB_PORT` | `3000`, always bound to loopback |
+| `HERDR_WEB_SESSION` | Unset: use the default Herdr session |
+| `HERDR_WEB_ORIGINS` | Comma-separated exact origins; defaults to `http://127.0.0.1:3000,http://localhost:3000` |
+| `HERDR_WEB_EXECUTABLE` | `herdr`; override the CLI executable path if necessary |
+
+For Tailscale Serve, include its exact HTTPS origin in `HERDR_WEB_ORIGINS` and
+restart the bridge. WebSocket requests require both an allowed Origin and Host.
 
 ### Quality checks and native dependencies
 
 Gleam's standard formatter is `gleam format`; its compiler provides type and lint
 diagnostics. `mise run check` checks formatting, runs `gleam check`, builds with
 `--warnings-as-errors`, and compiles Erlang interoperability modules with
-`erlc -Werror`. The installed pre-commit hook runs `check` and `test`; reinstall it
+`erlc -Werror`. Browser code uses TypeScript, ESLint and Prettier, plus Node's test
+runner. The installed pre-commit hook runs `check` and `test`; reinstall it
 with `mise run hooks:install` after cloning or changing the hook.
 
 The supervised subprocess adapter uses `erlexec`. Building its port executable
@@ -141,8 +162,9 @@ manifest.toml            Generated dependency lockfile
 mise.toml                Pinned tools and development/deployment tasks
 ```
 
-The browser terminal and its asset pipeline will be introduced with the streaming
-milestone. The scaffold's landing page is embedded in the Gleam HTTP module.
+`frontend/` contains the browser UI and tests. esbuild produces `priv/static/`,
+which is included in the production shipment. Development and export tasks build
+these assets automatically; Node/npm are build-time tools only.
 
 ## Design
 

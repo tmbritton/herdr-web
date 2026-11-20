@@ -7,10 +7,11 @@ persistent Herdr terminal panes. The main use case is checking on coding agents
 from a phone and occasionally interacting with their live terminal UI. It is also
 a practical project for learning Gleam and OTP.
 
-The initial scaffold provides a Gleam/Mist HTTP server, a placeholder landing page,
-and `/healthz` on `127.0.0.1:3000`, plus an HTTP integration test and systemd user
-service packaging. Herdr streaming, WebSockets, xterm.js, discovery, and control
-are not implemented yet. `/healthz` only checks bridge liveness.
+The bridge serves a watch-only xterm.js terminal and `/healthz` on
+`127.0.0.1:3000`. Supervised Herdr streams, exact WebSocket origins and bounded
+output are implemented; discovery and explicit control are next. `/healthz` only
+checks bridge liveness. See `TASKS.md` for progress and `docs/HERDR_PROTOCOL.md`
+for verified 0.8.2 behavior.
 
 - Read `README.md` for the overview and first milestone.
 - Read `PLAN.md` for the architecture, interaction rules, implementation sequence,
@@ -22,7 +23,10 @@ are not implemented yet. `/healthz` only checks bridge liveness.
 ## Structure and commands
 
 - `src/herdr_web.gleam`: startup, loopback binding, and process lifetime.
-- `src/herdr_web/web.gleam`: HTTP handler and embedded placeholder page.
+- `src/herdr_web/web.gleam`: HTTP handler, browser assets and WebSocket routing.
+- `src/herdr_web/socket.gleam`: attachment lifecycle and browser protocol.
+- `src/herdr_web_process*.erl`: bounded subprocess transport and OTP supervision.
+- `frontend/`: TypeScript/xterm.js UI, styles and Node unit tests.
 - `test/herdr_web_test.gleam`: Gleeunit runner and real HTTP integration test.
 - `deploy/herdr-web.service`: systemd user-service definition.
 - `scripts/install-service.sh`: production snapshot and service installation.
@@ -34,6 +38,7 @@ Run commands from the project root:
 ```bash
 mise trust
 mise install
+mise exec -- npm ci
 mise run hooks:install
 mise run dev      # http://127.0.0.1:3000
 mise run format
@@ -49,7 +54,10 @@ update the lockfile. Rebar3 is required to build Mist's Erlang dependencies.
 The pre-commit hook runs `mise run check` and `mise run test`. Never bypass it.
 `erlexec` also requires Make and a C++17 compiler at build time. See README for
 the local Bazzite/OpenSSL runtime-library override.
-There is no browser asset pipeline yet; add it with the xterm.js streaming work.
+The asset task bundles `frontend/` into `priv/static/` with esbuild. Node/npm are
+build-time dependencies. `check` also runs TypeScript, ESLint and Prettier; `test`
+runs Gleam and browser unit tests. `mise exec -- npm run test:integration` uses
+a disposable named Herdr session plus Chromium (install it with Playwright).
 
 ### Service deployment
 

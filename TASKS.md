@@ -10,7 +10,7 @@ design source of truth.
 - [x] **1. Herdr adapter:** Verify 0.8.2 on an isolated session. Implement bounded
   NDJSON framing, strict protocol decoding, and a monitored Erlang-port worker.
   Tests cover fragmented lines, malformed/oversized output, exits and cleanup.
-- [ ] **2. Watch streaming:** WebSocket origin validation, watch-only attachment,
+- [x] **2. Watch streaming:** WebSocket origin validation, watch-only attachment,
   browser asset build, xterm.js display with initial geometry and fresh snapshots.
   Test real WebSocket traffic and rendering; no input in watch mode.
 - [ ] **3. Discovery/navigation:** Read-only pane/tab discovery, stable IDs and
@@ -44,3 +44,7 @@ require a later hands-on check; report them separately from browser simulation.
   Probe findings are in `docs/HERDR_PROTOCOL.md`.
 - Standard Gleam formatting/compiler diagnostics and Erlang warnings-as-errors
   are required by `check`; the installed pre-commit hook runs `check` and `test`.
+- Watch-stream renderer and origin/target tests failed before implementation.
+  Real Herdr/Chromium integration verifies full frames, fresh reattachment,
+  rejected origins/input, unchanged desktop layout/focus and observer cleanup.
+  The hook now includes TypeScript, ESLint, Prettier and browser unit tests.

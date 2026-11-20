@@ -2,22 +2,25 @@
 gleam = "1.19.2"
 erlang = "29.1.1"
 rebar = "3.28.0"
+node = "26.7.0"
 
 [tasks.dev]
 description = "Run the bridge on http://127.0.0.1:3000"
+depends = ["assets"]
 run = "gleam run"
 
 [tasks.build]
 description = "Compile the application"
+depends = ["assets"]
 run = "gleam build"
 
 [tasks.format]
 description = "Format Gleam source"
-run = "gleam format src test"
+run = ["gleam format src test", "npm run format"]
 
 [tasks.check]
 description = "Check formatting, types, and compiler warnings"
-run = ["gleam format --check src test", "gleam check", "gleam build --warnings-as-errors", "bash scripts/check-erlang.sh"]
+run = ["gleam format --check src test", "gleam check", "gleam build --warnings-as-errors", "bash scripts/check-erlang.sh", "npm run check"]
 
 [tasks.lint]
 description = "Run Gleam's compiler lint checks (warnings are errors)"
@@ -29,10 +32,16 @@ run = "bash scripts/install-hooks.sh"
 
 [tasks.test]
 description = "Run the test suite"
-run = "gleam test"
+depends = ["assets"]
+run = ["gleam test", "npm test"]
+
+[tasks.assets]
+description = "Bundle the browser terminal"
+run = "npm run build"
 
 [tasks.export]
 description = "Build a production Erlang shipment"
+depends = ["assets"]
 run = "gleam export erlang-shipment"
 
 [tasks."service:install"]

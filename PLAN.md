@@ -2,9 +2,15 @@
 
 ## Current implementation
 
-The initial scaffold provides a Gleam/Mist HTTP server bound to `127.0.0.1:3000`,
-a placeholder landing page, a `/healthz` liveness endpoint, and an HTTP integration
-test. Herdr streaming and browser terminal interaction remain to be implemented.
+The bridge provides a Gleam/Mist HTTP server bound to `127.0.0.1:3000`, live
+watch-mode terminal streaming into xterm.js, exact WebSocket-origin validation,
+bounded subprocess buffering and a `/healthz` liveness endpoint. Pane discovery
+and explicit control remain to be implemented. `TASKS.md` tracks feature progress.
+
+The integration spike verified the installed Herdr 0.8.2 against disposable
+workloads; findings are in `docs/HERDR_PROTOCOL.md`. `erlexec` manages OS subprocess
+lifetimes through a small Erlang OTP worker, with typed Gleam protocol handling.
+Browser assets are built with esbuild, TypeScript and xterm.js.
 
 Development uses mise-pinned Gleam, Erlang/OTP, and Rebar3. Production deployment
 uses `gleam export erlang-shipment` and a systemd **user** service. The installer
