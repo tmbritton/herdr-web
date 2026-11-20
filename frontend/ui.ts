@@ -83,6 +83,7 @@ export class BrowserUi extends Context.Service<
     readonly finishComposer: (
       id: SubmissionId,
       message: string,
+      submitted?: boolean,
     ) => Effect.Effect<void>;
   }
 >()("herdr-web/BrowserUi") {
@@ -183,9 +184,11 @@ export class BrowserUi extends Context.Service<
       let draftPane: Option.Option<PaneId> = Option.none();
       let ctrlArmed = false;
       let nextSubmission = 0;
+      let draftRevision = 0;
       let pending: Option.Option<{
         id: SubmissionId;
         key: string;
+        revision: number;
         cancelled: boolean;
       }> = Option.none();
       const setCtrl = (enabled: boolean) => {
@@ -217,6 +220,7 @@ export class BrowserUi extends Context.Service<
         const next = drafts.get(key);
         dom.prompt.value = next?.text ?? "";
         dom.pasteStyle.value = next?.style ?? "bracketed";
+        draftRevision++;
         draftKey = key;
         draftPane = Option.some(pane);
       };
@@ -422,10 +426,19 @@ export class BrowserUi extends Context.Service<
           listen(button, "click", () =>
             withView((view) => {
               if (!suspended && view._tag === "Controlling") {
+                const key = button.getAttribute("data-key") ?? "";
+                if (
+                  key === "Enter" &&
+                  document.activeElement === dom.prompt &&
+                  dom.prompt.value.length > 0
+                ) {
+                  submit(dom.prompt.value, true);
+                  return;
+                }
                 emit({
                   _tag: "Key",
                   lease: view.lease,
-                  key: button.getAttribute("data-key") ?? "",
+                  key,
                   ctrl: ctrlArmed,
                 });
                 setCtrl(false);
@@ -441,7 +454,7 @@ export class BrowserUi extends Context.Service<
           }),
         );
         disposers.push(() => input.dispose());
-        const submit = (text: string, enter: boolean) =>
+        function submit(text: string, enter: boolean) {
           withView((view) => {
             if (
               suspended ||
@@ -450,7 +463,12 @@ export class BrowserUi extends Context.Service<
             )
               return;
             const id = SubmissionId.make(++nextSubmission);
-            pending = Option.some({ id, key: draftKey, cancelled: false });
+            pending = Option.some({
+              id,
+              key: draftKey,
+              revision: draftRevision,
+              cancelled: false,
+            });
             setCtrl(false);
             updateComposer();
             dom.composerStatus.textContent = "Sending…";
@@ -463,25 +481,29 @@ export class BrowserUi extends Context.Service<
               submit: enter,
             });
           });
+        }
         listen(dom.prompt, "input", () => {
+          draftRevision++;
           drafts.set(draftKey, {
             text: dom.prompt.value,
             style: dom.pasteStyle.value,
           });
           updateComposer();
         });
-        listen(dom.pasteStyle, "change", () =>
+        listen(dom.pasteStyle, "change", () => {
+          draftRevision++;
           drafts.set(draftKey, {
             text: dom.prompt.value,
             style: dom.pasteStyle.value,
-          }),
-        );
+          });
+        });
         listen(dom.paste, "click", () => submit(dom.prompt.value, false));
         listen(dom.compose, "submit", (event) => {
           event.preventDefault();
           submit(dom.prompt.value, true);
         });
         listen(dom.clearPrompt, "click", () => {
+          draftRevision++;
           dom.prompt.value = "";
           drafts.set(draftKey, { text: "", style: dom.pasteStyle.value });
           updateComposer();
@@ -681,9 +703,19 @@ export class BrowserUi extends Context.Service<
               !pending.value.cancelled &&
               pending.value.key === draftKey,
           ),
-        finishComposer: (id, message) =>
+        finishComposer: (id, message, submitted = false) =>
           Effect.sync(() => {
             if (Option.isNone(pending) || pending.value.id !== id) return;
+            if (
+              submitted &&
+              !pending.value.cancelled &&
+              pending.value.key === draftKey &&
+              pending.value.revision === draftRevision
+            ) {
+              dom.prompt.value = "";
+              drafts.set(draftKey, { text: "", style: dom.pasteStyle.value });
+              draftRevision++;
+            }
             pending = Option.none();
             dom.composerStatus.textContent = message;
             updateComposer();

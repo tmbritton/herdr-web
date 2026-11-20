@@ -85,6 +85,8 @@ Use **Effect 4**, following `docs/EFFECT_FRONTEND.md` and the pinned package's
 - Keep composer delivery on the controller stream. Herdr 0.8.2 does not report
   paste mode: preserve the explicit bracketed/plain choice, per-terminal page-local
   drafts, and ownership/visibility recheck before Enter. Never auto-resubmit.
+  Clear only an unchanged draft after successful submission; preserve newer edits
+  and failed/cancelled drafts. Toolbar Enter submits a focused composer draft.
 
 ### Service deployment
 

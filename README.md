@@ -98,16 +98,20 @@ desktop-TUI handoff and Pixel Fold transitions still need hands-on validation.
   for the next terminal key; input remains disabled in watch mode.
 - **Write a prompt** opens a multiline editor for typing, pasting or dictation.
   **Paste** inserts text without Enter. **Paste + Enter** waits briefly after
-  pasting and rechecks the attachment before sending Enter.
+  pasting and rechecks the attachment before sending Enter. The toolbar's
+  **Enter** button also submits a non-empty prompt while the editor is focused;
+  otherwise it sends Enter directly to the terminal.
 - Select **Bracketed** for applications expecting bracketed paste (the default
   for the OpenCode/TUI workflow), or **Plain text** for applications that do not.
   Herdr 0.8.2's rendered stream does not expose the application's paste mode, so
   the choice is explicit. Clipboard pastes into the terminal follow this choice.
   All input stays on the owned controller stream.
-- Drafts are kept per terminal in this page, including after successful sends;
-  use **Clear draft** when finished. Herdr does not acknowledge application input,
-  so uncertain sends are never automatically retried. Drafts do not survive a
-  full page reload. Pane selection and text size do persist when storage permits.
+- Successful submissions clear the editor and its saved draft, unless you edited
+  it while sending. Paste-only actions, failed/cancelled submissions and newer
+  edits keep their drafts. **Clear draft** discards a draft manually. Herdr does
+  not acknowledge application input, so uncertain sends are never automatically
+  retried. Drafts are page-local and per-terminal; a full page reload discards
+  them. Pane selection and text size persist when storage permits.
 - The layout follows the visual viewport when the keyboard opens. Folding,
   rotation and resizing preserve the selected pane, terminal instance and socket
   while the page remains active. Touch keys stay at the bottom of the visible UI.

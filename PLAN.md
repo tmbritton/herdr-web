@@ -140,9 +140,11 @@ Herdr supports multiple read-only observers and one terminal-stream controller a
 controller input as raw bytes and does not expose bracketed-paste state in the
 rendered ANSI stream. The composer therefore offers an explicit bracketed/plain
 paste choice, defaults to bracketed paste, and sends through the controller
-stream. It keeps drafts until the user clears them and revalidates ownership
-before a delayed Enter. This avoids assuming paste mode or using a separate pane
-API that bypasses stream ownership. See `docs/HERDR_PROTOCOL.md`.
+stream. Successful submissions clear an unchanged draft; paste-only actions,
+failures/cancellations and edits made while sending retain it. Toolbar Enter
+submits the focused composer, or sends a terminal Enter otherwise. Ownership is
+revalidated before a delayed Enter. This avoids assuming paste mode or using a
+separate pane API that bypasses stream ownership. See `docs/HERDR_PROTOCOL.md`.
 
 ## Tailscale deployment
 

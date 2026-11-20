@@ -102,7 +102,8 @@
             <button id="clear-prompt" type="button">Clear draft</button>
           </div>
           <span id="composer-status" role="status"
-            >Drafts stay in this page and are kept per terminal.</span
+            >Successful submissions clear the editor. Unsent drafts stay per
+            terminal.</span
           >
         </form>
       </details>
@@ -126,7 +127,13 @@
           Ctrl
         </button>
         <button data-key="ControlC" disabled>Ctrl+C</button
-        ><button data-key="Enter" disabled>Enter</button>
+        ><button
+          data-key="Enter"
+          title="Submit the focused prompt, otherwise send Enter to the terminal"
+          disabled
+        >
+          Enter
+        </button>
       </div>
     </footer>
     <dialog id="pane-dialog" aria-labelledby="picker-title">

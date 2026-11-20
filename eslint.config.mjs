@@ -51,6 +51,7 @@ export default ts.config(
         document: "readonly",
         window: "readonly",
         DOMException: "readonly",
+        Event: "readonly",
       },
     },
   },

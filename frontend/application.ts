@@ -390,7 +390,10 @@ export const runApplication = Effect.scoped(
             Effect.andThen(
               ui.finishComposer(
                 event.id,
-                "Sent to the control stream · draft kept until you clear it",
+                event.submit
+                  ? "Submitted to the control stream"
+                  : "Sent to the control stream · draft kept until you clear it",
+                event.submit,
               ),
             ),
             Effect.catch((error) =>

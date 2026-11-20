@@ -29,6 +29,8 @@ examples use different Schema, service, stream and error-handling APIs.
 - Prompt submissions run as scoped fibers, allowing release/navigation to cancel
   a delayed Enter. Branded submission IDs prevent an older completion from
   modifying a newer pending draft. Drafts stay page-local and are never replayed.
+  Successful submission clears only the matching draft revision; newer edits and
+  failed/cancelled submissions retain their drafts.
 - Enable strict TypeScript and type-aware ESLint plus Effect's compiler
   diagnostics. Tests include schema boundaries, state/capability transitions,
   cancellation, cleanup, backpressure and deterministic virtual-time cases.

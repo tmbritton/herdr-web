@@ -100,6 +100,15 @@ require a later hands-on check; report them separately from browser simulation.
   Serve uses port 10000 alongside the existing 443/8443 endpoints. Physical-device,
   live OpenCode and desktop-TUI acceptance checks below are not claimed as tested.
 
+## Follow-up: composer submission
+
+- [x] Clear unchanged drafts after successful submission and make toolbar Enter
+  submit a focused composer draft. Browser regressions failed first for retaining
+  submitted text, then for Enter failing to deliver the focused draft. Preserve
+  paste-only, failed/cancelled and newly edited drafts.
+  Checks, unit tests, and real Herdr/Chromium regressions pass; independent review
+  approved the change.
+
 ## Remaining hands-on acceptance
 
 - [ ] Pixel 9 Fold: outer display → unfold → keyboard/dictation → rotation →

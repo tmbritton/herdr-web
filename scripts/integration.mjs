@@ -395,7 +395,7 @@ try {
   const prompt =
     "printf 'COMPOSER_%s\\n' FIRST\nprintf 'COMPOSER_%s\\n' SECOND";
   await page.locator("#prompt").fill(prompt);
-  await page.getByRole("button", { name: "Paste", exact: true }).click();
+  await page.getByRole("button", { name: "Paste", exact: true }).tap();
   await page
     .locator("#composer-status")
     .filter({ hasText: "Sent to the control stream" })
@@ -419,6 +419,20 @@ try {
     .locator(".xterm-accessibility-tree")
     .filter({ hasText: "SUBMIT_OK" })
     .waitFor({ state: "attached" });
+  await until(
+    async () => (await page.locator("#prompt").inputValue()) === "",
+    "successful submission clears the composer",
+  );
+  await page.locator("#prompt").fill("printf 'COMPOSER_ENTER_%s\\n' OK");
+  await page.getByRole("button", { name: "Enter", exact: true }).tap();
+  await until(
+    () => readPane(pane).includes("COMPOSER_ENTER_OK"),
+    "Enter submits the focused composer",
+  );
+  await until(
+    async () => (await page.locator("#prompt").inputValue()) === "",
+    "Enter submission clears the composer",
+  );
   await page.locator("#paste-style").selectOption("plain");
   await page.locator("#prompt").fill("printf 'PLAIN_%s\\n' OK");
   await page
@@ -428,6 +442,47 @@ try {
     .locator(".xterm-accessibility-tree")
     .filter({ hasText: "PLAIN_OK" })
     .waitFor({ state: "attached" });
+  await until(
+    async () => (await page.locator("#prompt").inputValue()) === "",
+    "plain-text submission clears the composer",
+  );
+  await page.locator("#prompt").fill("printf 'EDIT_%s\\n' PRESERVED");
+  await page.evaluate(() => {
+    document.querySelector("#compose").addEventListener(
+      "submit",
+      () => {
+        const prompt = document.querySelector("#prompt");
+        prompt.value = "new draft entered while sending";
+        prompt.dispatchEvent(new Event("input", { bubbles: true }));
+      },
+      { once: true },
+    );
+  });
+  await page
+    .getByRole("button", { name: "Paste + Enter", exact: true })
+    .click();
+  await until(
+    () => readPane(pane).includes("EDIT_PRESERVED"),
+    "original prompt submitted before draft edit",
+  );
+  await page
+    .locator("#composer-status")
+    .filter({ hasText: "Submitted to the control stream" })
+    .waitFor();
+  assert.equal(
+    await page.locator("#prompt").inputValue(),
+    "new draft entered while sending",
+  );
+  const invalidPrompt = "\x1b[201~";
+  await page.locator("#prompt").fill(invalidPrompt);
+  await page
+    .getByRole("button", { name: "Paste + Enter", exact: true })
+    .click();
+  await page
+    .locator("#composer-status")
+    .filter({ hasText: "draft kept" })
+    .waitFor();
+  assert.equal(await page.locator("#prompt").inputValue(), invalidPrompt);
   await page.getByRole("button", { name: "Clear draft", exact: true }).click();
   assert.equal(await page.locator("#prompt").inputValue(), "");
   await page.locator("#prompt").fill("keep this draft for the first terminal");
